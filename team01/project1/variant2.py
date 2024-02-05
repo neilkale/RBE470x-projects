@@ -9,19 +9,19 @@ from game import Game
 from monsters.stupid_monster import StupidMonster
 
 # TODO This is your code!
-sys.path.insert(1, '../teamNN')
-from testcharacter import TestCharacter
+sys.path.insert(1, '../team01')
+from ourcharacter import OurCharacter
 
 # Create the game
-random.seed(123) # TODO Change this if you want different random choices
+# random.seed(123) # TODO Change this if you want different random choices
 g = Game.fromfile('map.txt')
-g.add_monster(StupidMonster("stupid", # name
+g.add_monster(StupidMonster("stupid idiot", # name
                             "S",      # avatar
                             3, 9      # position
 ))
 
 # TODO Add your character
-g.add_character(TestCharacter("me", # name
+g.add_character(OurCharacter("me", # name
                               "C",  # avatar
                               0, 0  # position
 ))

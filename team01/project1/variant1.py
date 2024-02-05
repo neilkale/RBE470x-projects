@@ -2,12 +2,13 @@
 import sys
 sys.path.insert(0, '../../bomberman')
 sys.path.insert(1, '..')
+print(sys.path)
 
 # Import necessary stuff
 from game import Game
 
 # TODO This is your code!
-sys.path.insert(1, '../teamNN')
+sys.path.insert(1, '../team01')
 
 # Uncomment this if you want the empty test character
 #from testcharacter import TestCharacter
@@ -19,6 +20,11 @@ from interactivecharacter import InteractiveCharacter
 g = Game.fromfile('map.txt')
 
 # TODO Add your character
+from ourcharacter import OurCharacter
+g.add_character(OurCharacter("me", # name
+                              "C",  # avatar
+                              0, 0  # position
+))
 
 # Uncomment this if you want the test character
 # g.add_character(TestCharacter("me", # name
@@ -27,15 +33,15 @@ g = Game.fromfile('map.txt')
 # ))
 
 # Uncomment this if you want the interactive character
-g.add_character(InteractiveCharacter("me", # name
-                                     "C",  # avatar
-                                     0, 0  # position
-))
+# g.add_character(InteractiveCharacter("me", # name
+#                                      "C",  # avatar
+#                                      0, 0  # position
+# ))
 
 # Run!
 
 # Use this if you want to press ENTER to continue at each step
-# g.go(0)
+g.go(0)
 
 # Use this if you want to proceed automatically
-g.go(1)
+# g.go(1)
