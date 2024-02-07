@@ -1,5 +1,6 @@
 {
     "python.analysis.extraPaths": [
-        "./Bomberman"
+        "./Bomberman",
+        "./Bomberman/monsters"
     ]
 }
