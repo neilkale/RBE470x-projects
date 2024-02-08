@@ -54,7 +54,7 @@ class AStar():
 
         # keep looping until no more nodes in frontier
         while not frontier.empty():
-            current_priority, current = frontier.get() # get the first node
+            current = frontier.get() # get the first node
             if current == goal: # reached to the goal
                 break 
             for next in self.getNeighborsOfEight(current, wrld): # get the list of neighbors 
@@ -62,15 +62,25 @@ class AStar():
                 new_cost = cost_so_far[current] + 1 
                 heuristic = self.heuristic(goal, next, wrld)
                 # true if the node has not been visited or if the next node costs less 
-                if not (next in cost_so_far) or new_cost < cost_so_far[next] or heuristic < heuristic_so_far[next]:
+                if not (next in cost_so_far) or new_cost < cost_so_far[next]: # or heuristic < heuristic_so_far[next]:
                     cost_so_far[next] = new_cost # set the cost 
                     heuristic_so_far[next] = heuristic
                     priority =  new_cost + heuristic # calculate the priority
                     frontier.put(next, priority) # add the node to the priority queue based on the cost 
                     came_from[next] = current # set the path of the node
-        
+
+            print(current)        
+            print(self.getNeighborsOfEight(current, wrld))
+            heuristiclist = []
+            for next in self.getNeighborsOfEight(current, wrld):
+                heuristiclist.append(round(self.heuristic(goal, next, wrld), 2))
+            print(heuristiclist)
+            print()
+
         print("WAHHHHHHHHHHHHHHHHHHHHHHHHH!!!!!!!!!!!!!!!!!!!! ASTARRR BLINK") # self explanatory 
-        print(current_priority)
+        # print(current_priority)
+        # print(current[0] - came_from[current][0])
+        # print(current[1] - came_from[current][1])
 
         path = [] # the optimized path 
         current = goal # go back wards
@@ -131,7 +141,7 @@ class AStar():
                 else:
                     penalty += 100 / (monster_dist ** 2)
         # print("penanlity", penalty)
-        return goal_dist + penalty
+        return goal_dist - penalty
                 
 
     def euclidean_distance(cell1, cell2):
