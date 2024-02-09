@@ -19,22 +19,20 @@ smartMonsterExist = {}
 
 class OurCharacter(CharacterEntity):
 
-
     def do(self, wrld, dumb = False, selfpreserving = False, aggressive = False):
         """Pick an action for the character"""
-        
-        # print(wrld.monsters)
-        
+
         # Get list of safe moves
-        ass = AStar()
-        path = ass.a_star(wrld, (self.x, self.y))
-        nextcell = path[0]
+        ass = AStar() # A Star object
+        goal = wrld.exitcell # goal cell
+        path = ass.a_star(wrld, (self.x, self.y), goal) # call the AStar func to get the path
+        nextcell = path[0] 
         dx,dy = nextcell[0] - self.x, nextcell[1] - self.y
         self.move(dx,dy)
     
 class AStar():
 
-    def a_star(self, wrld: World, start: tuple[int, int]) -> list[tuple[int, int]]:
+    def a_star(self, wrld: World, start: tuple[int, int], goal: tuple[int,int]) -> list[tuple[int, int]]:
         """
         Calculates the path using A Star
         :param mapdata [World]                  The map data.
@@ -50,7 +48,6 @@ class AStar():
         heuristic_so_far = {} # heuristic of each node
         came_from[start] = None # setting the came_from to None for start
         cost_so_far[start] = 0 # setting the cost of the start to 0
-        goal = wrld.exitcell
 
         # keep looping until no more nodes in frontier
         while not frontier.empty():
@@ -69,13 +66,13 @@ class AStar():
                     frontier.put(next, priority) # add the node to the priority queue based on the cost 
                     came_from[next] = current # set the path of the node
 
-            print(current)        
-            print(self.getNeighborsOfEight(current, wrld))
+            # print(current)        
+            # print(self.getNeighborsOfEight(current, wrld))
             heuristiclist = []
             for next in self.getNeighborsOfEight(current, wrld):
                 heuristiclist.append(round(self.heuristic(goal, next, wrld), 2))
-            print(heuristiclist)
-            print()
+            # print(heuristiclist)
+            # print()
 
         print("WAHHHHHHHHHHHHHHHHHHHHHHHHH!!!!!!!!!!!!!!!!!!!! ASTARRR BLINK") # self explanatory 
         # print(current_priority)
@@ -84,8 +81,6 @@ class AStar():
 
         path = [] # the optimized path 
         current = goal # go back wards
-        # print("GOALL", goal)
-        # print("Came From", came_from)
         while True:
             path.insert(0, current) # add the path to the list
             # print("path", path)
@@ -116,11 +111,12 @@ class AStar():
         return [(x+dx,y+dy) for (dx,dy) in neighbors]
         
     def heuristic(self, goal, next, wrld):
-        goal_dist = AStar.euclidean_distance(goal, next)
+        goal_dist = self.euclidean_distance(goal, next)
         penalty = 0.0
-        for monster in list(wrld.monsters.values())[0]:
-            monster_dist = AStar.euclidean_distance((monster.x, monster.y), next)
-            if (monster.name == 'stupid'):
+        for monster_list in (wrld.monsters.values()):
+            monster = monster_list[0]
+            monster_dist = self.euclidean_distance((monster.x, monster.y), next)
+            if (monster.name == 'stupid idiot'):
                 # print("dummm monnn")
                 if monster_dist <= 2:
                     # Increase penalty for closer monsters
@@ -144,5 +140,8 @@ class AStar():
         return goal_dist - penalty
                 
 
-    def euclidean_distance(cell1, cell2):
+    def euclidean_distance(self, cell1, cell2):
         return math.dist(cell1, cell2)
+    
+
+    
