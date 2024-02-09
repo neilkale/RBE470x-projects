@@ -1,5 +1,6 @@
 # This is necessary to find the main code
 import sys
+
 sys.path.insert(0, '../../bomberman')
 sys.path.insert(1, '../../bomberman/monsters')
 
@@ -8,16 +9,18 @@ from entity import CharacterEntity
 from colorama import Fore, Back
 
 from world import World
-import math
+from sensed_world import SensedWorld
+
 from priority_queue import PriorityQueue
 
 from selfpreserving_monster import SelfPreservingMonster
 from stupid_monster import StupidMonster
 
 from enum import Enum
+import numpy as np
+import math
 
-dumbMonsterExists = False
-smartMonsterExist = {}
+MAX_DEPTH = 2
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -44,10 +47,8 @@ class ExpectimaxCharacter(CharacterEntity):
         Output: The best action determined by expectimax (e.g., move direction).
         """
         # Start the expectimax search from the current state
-        depth = 0
-        action = self.expectimax(wrld, depth)
+        action = self.expectimax(wrld, depth=0)
 
-        # Decide the best action based on expectimax result
         # Execute the action
         self.takeAction(action)
 
@@ -70,33 +71,78 @@ class ExpectimaxCharacter(CharacterEntity):
         - depth: The current depth in the search tree.
         Output: The best score and corresponding action at this level of the tree.
         """
-        bestAction = None
-        # bestScore = numpy  
+        bestAction, bestScore = None, np.Inf
 
-        # Base case: if terminal state or maximum depth reached, return the evaluated score
+        actions = self.findPossibleActions(wrld)
+        for act in actions:
+            score = self.evaluateChanceNode(wrld, act, depth)
+            if (score > bestScore):
+                bestAction, bestScore = act, score
+        return bestAction, bestScore
 
-        # If the current agent is the player, call the max_value function
+    def evaluateChanceNode(self, wrld, action, depth):
+        possibleWorlds = self.simulateAction(wrld, action)
+        # possible_worlds is [(World, probability), (World, probability), ...]
+        score = 0
 
-        # If the current agent is a monster/environment, call the exp_value function
+        for (possibleWorld, probability) in possibleWorlds:
+            heuristic = self.heuristic(possibleWorld)
+            if (depth >= MAX_DEPTH or abs(heuristic) >= 10):
+                score += heuristic*probability
+            else:
+                _, possibleScore = self.expectimax(possibleWorld, depth+1)
+                score += possibleScore * probability
 
-    def findPossibleAction(self, wrld): 
+        return score
+    
+    def simulateAction(self, wrld, action):
+        possibleWorlds = []
+
+        # Assume there is only one monster and every future world is equally likely (stupid monster)
+        if (len(wrld.monsters.values()) == 1):
+            monster = wrld.monsters.values()[0]
+            actions = self.findPossibleMonsterActions(monster, wrld)
+            numWorlds = len(actions)
+            for act in actions:
+                newWorld = SensedWorld.fromWorld(wrld)
+                newMonster = newWorld.monsters.values()[0]
+                newMonster.move(act[0], act[1])
+                newWorld = newWorld.next()
+                possibleWorlds.append((newWorld, 1/numWorlds))
+            
+            return possibleWorlds
+            
+    def findPossibleActions(self, wrld): 
         """ finds all the possible actions that can be taken
         Output: the list of the possible action that the charater can take
         """
         # is this action possible? is there a wall next to me
         possibleActions = [] # stores the list of possible action
-        x,y = wrld.characters_at() # stores the current location of the character
         for action in ActionSet:
             dx,dy = action
             if action == ActionSet.BOMB:
-                # implement this later
-                pass
+                pass # implement this later
             else: 
-                if (wrld.exit_at(x + dx, y + dy) or
-                        wrld.empty_at(x + dx, y + dy)):
-                    possibleActions.append(action)
-
+                if (0 <= self.x + dx < wrld.width() and 0 <= self.y + dy < wrld.height()):
+                    if (wrld.exit_at(self.x + dx, self.y + dy) or
+                            wrld.empty_at(self.x + dx, self.y + dy)):
+                        possibleActions.append(action)
         return possibleActions
                     
-        
+    def findPossibleMonsterActions(self, monster, wrld): 
+        """ finds all the possible actions that can be taken
+        Output: the list of the possible action that the charater can take
+        """
+        # is this action possible? is there a wall next to me
+        possibleActions = [] # stores the list of possible action
+        for action in ActionSet:
+            dx,dy = action
+            if action == ActionSet.BOMB:
+                pass
+            else: 
+                if (0 <= monster.x + dx < wrld.width() and 0 <= monster.y + dy < wrld.height()):
+                    if not wrld.wall_at(monster.x + dx, monster.y + dy):
+                        possibleActions.append(action)
+        return possibleActions
+                    
 
