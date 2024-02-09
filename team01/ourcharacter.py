@@ -116,7 +116,7 @@ class AStar():
         for monster_list in (wrld.monsters.values()):
             monster = monster_list[0]
             monster_dist = self.euclidean_distance((monster.x, monster.y), next)
-            if (monster.name == 'stupid idiot'):
+            if (monster.name == 'stupid'):
                 # print("dummm monnn")
                 if monster_dist <= 2:
                     # Increase penalty for closer monsters

@@ -22,7 +22,8 @@ from enum import Enum
 import numpy as np
 import math
 
-MAX_DEPTH = 0
+MAX_DEPTH = 1
+VERBOSE = True
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -36,6 +37,12 @@ class ActionSet(Enum):
     WN = (-1,-1)
     BOMB = (0,0)
 
+    @staticmethod
+    def from_tuple(input_tuple):
+        for action in ActionSet:
+            if action.value == input_tuple:
+                return action
+        return None
 
 class ExpectimaxCharacter(CharacterEntity):
     
@@ -45,7 +52,10 @@ class ExpectimaxCharacter(CharacterEntity):
         - wrld: The current state of the world.
         Output: The best action determined by expectimax (e.g., move direction).
         """
-        # Start the expectimax search from the current state
+        # TODO: If the character is closer to the end state than the monster, use A* move.
+
+        # Else, start the expectimax search from the current state
+        if VERBOSE: print("--------------- ACTION ---------------------")
         action, _ = self.expectimax(wrld, depth=0)
 
         # Execute the action
@@ -73,36 +83,43 @@ class ExpectimaxCharacter(CharacterEntity):
         bestAction, bestScore = None, np.Inf
 
         actions = self.findPossibleActions(wrld)
-        print(actions)
+        wrld.printit()
         for act in actions:
+            if VERBOSE: print("Act: ", act)
             score = self.evaluateChanceNode(wrld, act, depth)
-            print(score)
+            if VERBOSE: print("Score", " ", score)
+            if VERBOSE: print()
             if (score < bestScore):
                 bestAction, bestScore = act, score
+
+        if VERBOSE: print("BEST: ", bestAction, "SCORE: ", bestScore)
         return bestAction, bestScore
 
     def evaluateChanceNode(self, wrld, action, depth):
         possibleWorlds = self.simulateAction(wrld, action)
+        if VERBOSE: print("Num Worlds:", len(possibleWorlds))
         # possible_worlds is [(World, probability), (World, probability), ...]
         score = 0
 
         for (possibleWorld, probability) in possibleWorlds:
-            print(action)
-            possibleWorld.printit()
+            # print(action)
+            if VERBOSE: print("Events:", possibleWorld.events)
+            # possibleWorld.printit()
             heuristic = self.heuristic(possibleWorld)
-            print(heuristic)
+            if VERBOSE: print(heuristic, " ", probability)
             if (depth >= MAX_DEPTH or abs(heuristic) >= 100):
-                print("HEURISTIC USED")
+                if VERBOSE: print("HEURISTIC USED")
                 score += heuristic*probability
             else:
+                if VERBOSE: print("EXPECTIMAX USED")
                 _, possibleScore = self.expectimax(possibleWorld, depth+1)
                 score += possibleScore * probability
 
         return score
     
-    def simulateAction(self, wrld, charAction):
+    def simulateActionSimple(self, wrld, charAction):
         possibleWorlds = []
-        # Assume there is only one monster and every future world is equally likely (stupid monster)
+        # Assume there is only one monster 
         if (len(wrld.monsters.values()) == 1):
             monster = list(wrld.monsters.values())[0][0]
             actions = self.findPossibleMonsterActions(monster, wrld)
@@ -115,21 +132,71 @@ class ExpectimaxCharacter(CharacterEntity):
                 newMonster.move(act.value[0], act.value[1])
                 newWorld, _ = newWorld.next()
                 possibleWorlds.append((newWorld, 1/numWorlds))
-            return possibleWorlds
+        return possibleWorlds
     
+    def simulateAction(self, wrld, charAction):
+        possibleWorlds = []
+        # Assume there is only one monster 
+        if (len(wrld.monsters.values()) == 1):
+            monster = list(wrld.monsters.values())[0][0]
+            actions = self.findPossibleMonsterActions(monster, wrld)
+            numWorlds = len(actions)
+            # Assume every future world is equally likely (stupid idiot monster)
+            if (monster.name == 'stupid'):
+                for act in actions:
+                    newWorld = SensedWorld.from_world(wrld)
+                    newCharacter = list(newWorld.characters.values())[0][0]
+                    newCharacter.move(charAction.value[0], charAction.value[1])
+                    newMonster = list(newWorld.monsters.values())[0][0]
+                    newMonster.move(act.value[0], act.value[1])
+                    newWorld, _ = newWorld.next()
+                    possibleWorlds.append((newWorld, 1/numWorlds))
+            elif (monster.name == 'selfpreserving'):
+
+                # If kill action not possible, and same action as last time is possible, take that action
+                lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+                if (self.manhattanDistance((monster.x, monster.y), (self.x, self.y)) >= 2 and lastAction != ActionSet.BOMB and lastAction in actions):
+                    if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+                    actions = [lastAction]
+                numWorlds = len(actions)
+
+                # Iterate through possible actions
+                for act in actions:
+                    newWorld = SensedWorld.from_world(wrld)
+                    newCharacter = list(newWorld.characters.values())[0][0]
+                    newCharacter.move(charAction.value[0], charAction.value[1])
+                    newMonster = list(newWorld.monsters.values())[0][0]
+                    newMonster.move(act.value[0], act.value[1])
+                    newWorld, _ = newWorld.next()
+
+                    # If kill action possible, take that with probability 1.0
+                    events = [event.tpe for event in newWorld.events]
+                    if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+                        possibleWorlds = [(newWorld, 1)]
+                        break
+                    else:
+                        possibleWorlds.append((newWorld, 1/numWorlds))
+
+            return possibleWorlds
+
+
     def heuristic(self, wrld):
-        if (Event.CHARACTER_FOUND_EXIT in wrld.events): # If exit found, return really negative (good) heuristic
+        events = [event.tpe for event in wrld.events]
+        if (Event.CHARACTER_FOUND_EXIT in events): # If exit found, return really negative (good) heuristic
             return -100
-        if (list(wrld.characters.values()) == 0 or Event.CHARACTER_KILLED_BY_MONSTER in wrld.events or Event.BOMB_HIT_CHARACTER in wrld.events): # If character kiled, return really positive (bad) heuristic.
+        if (Event.CHARACTER_KILLED_BY_MONSTER in events or Event.BOMB_HIT_CHARACTER in events): # If character kiled, return really positive (bad) heuristic.
             return 100
         else:
             character = list(wrld.characters.values())[0][0]
             U1 = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
             U2 = 0
             # for monster in list(wrld.monsters.values())[0]:
-            #     U2 += 10 / math.dist((self.x, self.y), (monster.x,monster.y)) ** 2 # distance to each monster
+            #     # U2 += 10 / AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y)) ** 2 # distance to each monster
+            #     U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
             return U1 - U2*0.1
         
+    def manhattanDistance(self, a, b):
+        return abs(a[0]-b[0])+abs(a[1]-b[1])
 
     def findPossibleActions(self, wrld): 
         """ finds all the possible actions that can be taken
@@ -154,14 +221,11 @@ class ExpectimaxCharacter(CharacterEntity):
         """
         # is this action possible? is there a wall next to me
         possibleActions = [] # stores the list of possible action
-        for action in ActionSet:
+        for action in ActionSet: # Note ActionSet works for the Monster. The BOMB action doubles for the monster's 'no move' action.
             dx,dy = action.value[0], action.value[1]
-            if action == ActionSet.BOMB:
-                pass
-            else: 
-                if (0 <= monster.x + dx < wrld.width() and 0 <= monster.y + dy < wrld.height()):
-                    if not wrld.wall_at(monster.x + dx, monster.y + dy):
-                        possibleActions.append(action)
+            if (0 <= monster.x + dx < wrld.width() and 0 <= monster.y + dy < wrld.height()):
+                if not wrld.wall_at(monster.x + dx, monster.y + dy):
+                    possibleActions.append(action)
         return possibleActions
                     
 class AStar():
