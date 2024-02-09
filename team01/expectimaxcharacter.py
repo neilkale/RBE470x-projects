@@ -1,6 +1,8 @@
 # This is necessary to find the main code
 import sys
 
+from events import Event
+
 sys.path.insert(0, '../../bomberman')
 sys.path.insert(1, '../../bomberman/monsters')
 
@@ -20,7 +22,7 @@ from enum import Enum
 import numpy as np
 import math
 
-MAX_DEPTH = 2
+MAX_DEPTH = 0
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -36,9 +38,6 @@ class ActionSet(Enum):
 
 
 class ExpectimaxCharacter(CharacterEntity):
-
-    def __init__(self):
-        pass
     
     def do(self, wrld):
         """
@@ -47,12 +46,12 @@ class ExpectimaxCharacter(CharacterEntity):
         Output: The best action determined by expectimax (e.g., move direction).
         """
         # Start the expectimax search from the current state
-        action = self.expectimax(wrld, depth=0)
+        action, _ = self.expectimax(wrld, depth=0)
 
         # Execute the action
         self.takeAction(action)
 
-    def takeAction(self, wrld, action):
+    def takeAction(self, action):
         """
         Executes the move based on the action
         - wrld: The current state of the world.
@@ -61,7 +60,7 @@ class ExpectimaxCharacter(CharacterEntity):
         if action == ActionSet.BOMB:
             self.place_bomb()
         else:
-            self.move(action[0],action[1])
+            self.move(action.value[0],action.value[1])
     
 
     def expectimax(self, wrld, depth):
@@ -74,9 +73,11 @@ class ExpectimaxCharacter(CharacterEntity):
         bestAction, bestScore = None, np.Inf
 
         actions = self.findPossibleActions(wrld)
+        print(actions)
         for act in actions:
             score = self.evaluateChanceNode(wrld, act, depth)
-            if (score > bestScore):
+            print(score)
+            if (score < bestScore):
                 bestAction, bestScore = act, score
         return bestAction, bestScore
 
@@ -86,8 +87,12 @@ class ExpectimaxCharacter(CharacterEntity):
         score = 0
 
         for (possibleWorld, probability) in possibleWorlds:
+            print(action)
+            possibleWorld.printit()
             heuristic = self.heuristic(possibleWorld)
-            if (depth >= MAX_DEPTH or abs(heuristic) >= 10):
+            print(heuristic)
+            if (depth >= MAX_DEPTH or abs(heuristic) >= 100):
+                print("HEURISTIC USED")
                 score += heuristic*probability
             else:
                 _, possibleScore = self.expectimax(possibleWorld, depth+1)
@@ -95,23 +100,37 @@ class ExpectimaxCharacter(CharacterEntity):
 
         return score
     
-    def simulateAction(self, wrld, action):
+    def simulateAction(self, wrld, charAction):
         possibleWorlds = []
-
         # Assume there is only one monster and every future world is equally likely (stupid monster)
         if (len(wrld.monsters.values()) == 1):
-            monster = wrld.monsters.values()[0]
+            monster = list(wrld.monsters.values())[0][0]
             actions = self.findPossibleMonsterActions(monster, wrld)
             numWorlds = len(actions)
             for act in actions:
-                newWorld = SensedWorld.fromWorld(wrld)
-                newMonster = newWorld.monsters.values()[0]
-                newMonster.move(act[0], act[1])
-                newWorld = newWorld.next()
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newCharacter.move(charAction.value[0], charAction.value[1])
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
                 possibleWorlds.append((newWorld, 1/numWorlds))
-            
             return possibleWorlds
-            
+    
+    def heuristic(self, wrld):
+        if (Event.CHARACTER_FOUND_EXIT in wrld.events): # If exit found, return really negative (good) heuristic
+            return -100
+        if (list(wrld.characters.values()) == 0 or Event.CHARACTER_KILLED_BY_MONSTER in wrld.events or Event.BOMB_HIT_CHARACTER in wrld.events): # If character kiled, return really positive (bad) heuristic.
+            return 100
+        else:
+            character = list(wrld.characters.values())[0][0]
+            U1 = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
+            U2 = 0
+            # for monster in list(wrld.monsters.values())[0]:
+            #     U2 += 10 / math.dist((self.x, self.y), (monster.x,monster.y)) ** 2 # distance to each monster
+            return U1 - U2*0.1
+        
+
     def findPossibleActions(self, wrld): 
         """ finds all the possible actions that can be taken
         Output: the list of the possible action that the charater can take
@@ -119,7 +138,7 @@ class ExpectimaxCharacter(CharacterEntity):
         # is this action possible? is there a wall next to me
         possibleActions = [] # stores the list of possible action
         for action in ActionSet:
-            dx,dy = action
+            dx,dy = action.value[0], action.value[1]
             if action == ActionSet.BOMB:
                 pass # implement this later
             else: 
@@ -136,7 +155,7 @@ class ExpectimaxCharacter(CharacterEntity):
         # is this action possible? is there a wall next to me
         possibleActions = [] # stores the list of possible action
         for action in ActionSet:
-            dx,dy = action
+            dx,dy = action.value[0], action.value[1]
             if action == ActionSet.BOMB:
                 pass
             else: 
@@ -145,4 +164,75 @@ class ExpectimaxCharacter(CharacterEntity):
                         possibleActions.append(action)
         return possibleActions
                     
+class AStar():
 
+    def a_star(wrld: World, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
+        """
+        Calculates the path using A Star
+        :param wrld [World]                  The map data.
+        :start: tuple[int, int]                 The starting position (grid coord)
+        :goal: tuple[int, int]                 The goal position (grid coord)
+        :return        list[tuple[int, int]]    The path i.e. list of points (grid coord)
+        """
+
+        frontier = PriorityQueue() # frontier 
+        frontier.put(start,0) # adding the start to the frontier 
+        came_from = {} # list of linked list of the path to each node
+        cost_so_far = {} # cost to each node
+        heuristic_so_far = {} # heuristic of each node
+        came_from[start] = None # setting the came_from to None for start
+        cost_so_far[start] = 0 # setting the cost of the start to 0
+
+        # keep looping until no more nodes in frontier
+        while not frontier.empty():
+            current = frontier.get() # get the first node
+            if current == goal: # reached to the goal
+                break 
+            for next in AStar.getNeighborsOfEight(current, wrld): # get the list of neighbors 
+                # calculate the new cost
+                new_cost = cost_so_far[current] + 1 
+                heuristic = AStar.heuristic(goal, next)
+                # true if the node has not been visited or if the next node costs less 
+                if not (next in cost_so_far) or new_cost < cost_so_far[next]: # or heuristic < heuristic_so_far[next]:
+                    cost_so_far[next] = new_cost # set the cost 
+                    heuristic_so_far[next] = heuristic
+                    priority =  new_cost + heuristic # calculate the priority
+                    frontier.put(next, priority) # add the node to the priority queue based on the cost 
+                    came_from[next] = current # set the path of the node
+
+        path = [] # the optimized path 
+        current = goal # go back wards
+        while True:
+            path.insert(0, current) # add the path to the list
+            current = came_from[current] # set the curent to the node current came from
+            if(current == start): # true if we reach the start
+                break
+        
+        # return the path
+        return path
+        
+    def getNeighborsOfEight(cell: tuple[int,int], wrld: World):
+        # List of empty cells
+        neighbors = []
+        x,y = cell
+        # Go through neighboring cells
+        for dx in [-1, 0, 1]:
+            # Avoid out-of-bounds access
+            if ((x + dx >= 0) and (x + dx < wrld.width())):
+                for dy in [-1, 0, 1]:
+                    # Avoid out-of-bounds access
+                    if ((y + dy >= 0) and (y + dy < wrld.height())):
+                        # Is this cell safe and not a non-move?
+                        if  (wrld.exit_at(x + dx, y + dy) or
+                        wrld.empty_at(x + dx, y + dy)):
+                            # Yes
+                            neighbors.append((dx, dy))
+        # All done
+        return [(x+dx,y+dy) for (dx,dy) in neighbors]
+        
+    def heuristic(goal, next):
+        goal_dist = AStar.euclidean_distance(goal, next)
+        return goal_dist
+                
+    def euclidean_distance(cell1, cell2):
+        return math.dist(cell1, cell2)
