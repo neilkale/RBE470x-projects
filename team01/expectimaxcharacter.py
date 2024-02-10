@@ -23,7 +23,7 @@ import numpy as np
 import math
 
 MAX_DEPTH = 1
-VERBOSE = True
+VERBOSE = False
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -82,8 +82,8 @@ class ExpectimaxCharacter(CharacterEntity):
         """
         bestAction, bestScore = None, np.Inf
 
-        actions = self.findPossibleActions(wrld)
-        wrld.printit()
+        actions = self.findPossibleActions(wrld) #NOTE: The bug is this function does not return all the possible actions. Some are missing. Find out why.
+        if VERBOSE: wrld.printit()
         for act in actions:
             if VERBOSE: print("Act: ", act)
             score = self.evaluateChanceNode(wrld, act, depth)
@@ -155,7 +155,7 @@ class ExpectimaxCharacter(CharacterEntity):
 
                 # If kill action not possible, and same action as last time is possible, take that action
                 lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
-                if (self.manhattanDistance((monster.x, monster.y), (self.x, self.y)) >= 2 and lastAction != ActionSet.BOMB and lastAction in actions):
+                if (not self.isEightNeighbor((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) and lastAction != ActionSet.BOMB and lastAction in actions):
                     if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
                     actions = [lastAction]
                 numWorlds = len(actions)
@@ -197,6 +197,9 @@ class ExpectimaxCharacter(CharacterEntity):
         
     def manhattanDistance(self, a, b):
         return abs(a[0]-b[0])+abs(a[1]-b[1])
+    
+    def isEightNeighbor(self, a, b):
+        return abs(a[0] - b[0]) <= 1 and abs(a[1] - b[1]) <= 1
 
     def findPossibleActions(self, wrld): 
         """ finds all the possible actions that can be taken
@@ -210,8 +213,7 @@ class ExpectimaxCharacter(CharacterEntity):
                 pass # implement this later
             else: 
                 if (0 <= self.x + dx < wrld.width() and 0 <= self.y + dy < wrld.height()):
-                    if (wrld.exit_at(self.x + dx, self.y + dy) or
-                            wrld.empty_at(self.x + dx, self.y + dy)):
+                    if not wrld.wall_at(self.x + dx, self.y + dy):
                         possibleActions.append(action)
         return possibleActions
                     
