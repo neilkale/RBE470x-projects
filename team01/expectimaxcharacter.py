@@ -155,7 +155,7 @@ class ExpectimaxCharacter(CharacterEntity):
 
                 # If kill action not possible, and same action as last time is possible, take that action
                 lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
-                if (not self.isEightNeighbor((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) and lastAction != ActionSet.BOMB and lastAction in actions):
+                if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 2 and lastAction != ActionSet.BOMB and lastAction in actions):
                     if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
                     actions = [lastAction]
                 numWorlds = len(actions)
