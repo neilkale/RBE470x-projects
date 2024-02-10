@@ -5,6 +5,9 @@ sys.path.insert(0, '../bomberman')
 from entity import CharacterEntity
 from colorama import Fore, Back
 
+from events import Event
+
+
 from world import World
 from sensed_world import SensedWorld
 
@@ -25,14 +28,11 @@ class ActionSet(Enum):
     WN = (-1,-1)
     BOMB = (0,0)
 
-inf = 100 
-ass = AStar() 
+inf = 100.0 
+MAX_DEPTH = 2
 
-class minimaxCharacter(CharacterEntity):
-
-    
-    def __init__(self):
-        pass
+VERBOSE = True
+class MinimaxCharacter(CharacterEntity):
 
     def do(self, wrld):
         # Your code here
@@ -42,7 +42,11 @@ class minimaxCharacter(CharacterEntity):
         Output: The best action determined by minimax (e.g., move direction).
         """
         # Start the expectimax search from the current state
+        if VERBOSE: print("**************here in do*************")
+        print("***************------------------------------***************")
         action = self.minimax(wrld, depth=0)
+
+        if VERBOSE: print("Action: ", action)
 
         # Execute the action
         self.takeAction(wrld, action)
@@ -67,55 +71,125 @@ class minimaxCharacter(CharacterEntity):
         """
         # Get list of legal actions (moves)
         possibleActions = self.findPossibleActions(wrld)
+        if VERBOSE: print("Possible Actions: ", possibleActions)
 
-        bestScore = float(inf)
+        bestScore = inf
         bestAction = None
 
         # Start the search 
         for action in possibleActions:
             nextWorld = self.simulateActionSimple(wrld,action)
-            score = self.maxValue(nextWorld)
+            if VERBOSE: print("Next world:", nextWorld)
+            score = self.minValue(nextWorld, depth)
 
-            if score < bestScore:
+            if VERBOSE: print ("Score: ", score)
+
+            if score <= bestScore:
                 bestScore = score
                 bestAction = action
 
         return bestAction, bestScore
     
-    def maxValue(self, wrld):
+    def maxValue(self, wrld, depth):
         """
         Max-value function of minimax
         - wrld: The current state of the world.
         Output: The maximum utility value
         """
-        if self.terminalState(wrld):    
+        if self.terminalState(wrld) or depth > MAX_DEPTH:    
+            if VERBOSE: print("Terminal state Max node, Heuristic: ", self.heuristic(wrld))
             return self.heuristic(wrld)
         
+        v = -inf
+        print("\nMAX NODE\n", "Depth: ", depth)
+        possibleActions = self.findPossibleActions(wrld)
+        print("possibleActions", possibleActions)
 
-    def heuristics(self, wrld):
+        for action in possibleActions:
+            heuri = self.heuristic(wrld)
+            if (depth > MAX_DEPTH):
+                if VERBOSE: print("MAX DEPTH REACHED")
+                v = heuri
+            else:
+                next_wrld = self.simulateActionSimple(wrld, action)
+                print("Max V", v)
+                v = max(v,self.minValue(next_wrld, depth + 1))
+            
+        print ("Max Value: ", v)
+
+        return v
+    
+
+    
+    def minValue(self, wrld, depth):
+        """
+        Min-value function of minimax
+        - wrld: The current state of the world.
+        Output: The minimum utility value
+        """
+        print("\nMIN NODE\n", "Depth: ", depth)
+        if self.terminalState(wrld) or depth > MAX_DEPTH:   
+            if VERBOSE: print("Terminal State min node, Heuristic: ", self.heuristic(wrld)) 
+            return self.heuristic(wrld)
+        
+        v = inf
+
+        possibleActions = self.findPossibleActions(wrld)
+        if VERBOSE: print("Possible Action", possibleActions)
+
+        for action in possibleActions:
+            if (depth > MAX_DEPTH):
+                if VERBOSE: print("MAX DEPTH REACHED")
+                v = self.heuristic(wrld)
+            else:
+                next_wrld = self.simulateActionSimple(wrld, action)
+                # if VERBOSE: print("Depth", depth, "Next World", next_wrld)
+                v = min(v,self.maxValue(next_wrld, depth+1))
+                
+            
+        print ("Min Value: ", v)
+        return v
+        
+    def terminalState(self, wrld):
+        events = [event.tpe for event in wrld.events]
+        if (Event.CHARACTER_FOUND_EXIT in events or Event.BOMB_HIT_CHARACTER in events or Event.CHARACTER_KILLED_BY_MONSTER in events):
+            return True
+        return False
+
+
+    def heuristic(self, wrld):
         events = [event.tpe for event in wrld.events]
         if (Event.CHARACTER_FOUND_EXIT in events): # yay we are wining, return good heuristics (negative for us)
             return -inf
         elif (Event.CHARACTER_KILLED_BY_MONSTER or Event.BOMB_HIT_CHARACTER): # no we dont want this, return bad heuristic (posiitve)
             return inf
-        charDistToExit = ass.euclidean_distance
+        character = list(wrld.characters.values())[0][0]
+        monster = list(wrld.monsters.values())[0][0]
+        # charDistToExit = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
+        charDistToMonster = AStar.euclidean_distance((character.x,character.y), (monster.x,monster.y))
+        charDistToExit = AStar.euclidean_distance((character.x,character.y), wrld.exitcell)
+        return charDistToExit - charDistToExit
+
 
     def simulateActionSimple(self, wrld, charAction):
-        possibleWorlds = []
-        # Assume there is only one monster 
+        newWrld = SensedWorld.from_world(wrld)
+
+        # move the character
+        character = list(newWrld.characters.values())[0][0]
+        character.move(charAction.value[0], charAction.value[1])
+
+        # move the monster 
         if (len(wrld.monsters.values()) == 1):
             monster = list(wrld.monsters.values())[0][0]
-            actions = self.findPossibleMonsterActions(monster, wrld)
-            numWorlds = len(actions)
-            for act in actions:
-                newWorld = SensedWorld.from_world(wrld)
-                newCharacter = list(newWorld.characters.values())[0][0]
-                newCharacter.move(charAction.value[0], charAction.value[1])
-                newMonster = list(newWorld.monsters.values())[0][0]
+            monsterActions = self.findPossibleMonsterActions(monster, wrld)
+            for act in monsterActions:
+                newMonster = list(newWrld.monsters.values())[0][0]
                 newMonster.move(act.value[0], act.value[1])
-                newWorld, _ = newWorld.next()
-                possibleWorlds.append((newWorld, 1/numWorlds))
-        return possibleWorlds
+            
+            newWrld, _ = newWrld.next()
+            return newWrld
+        return wrld
+
     
     def findPossibleMonsterActions(self, monster, wrld): 
         """ finds all the possible actions that can be taken
