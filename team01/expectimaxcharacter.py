@@ -176,6 +176,31 @@ class ExpectimaxCharacter(CharacterEntity):
                         break
                     else:
                         possibleWorlds.append((newWorld, 1/numWorlds))
+            elif (monster.name == 'aggressive'):
+
+                # If kill action not possible, and same action as last time is possible, take that action
+                lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+                if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 3 and lastAction != ActionSet.BOMB and lastAction in actions):
+                    if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+                    actions = [lastAction]
+                numWorlds = len(actions)
+
+                # Iterate through possible actions
+                for act in actions:
+                    newWorld = SensedWorld.from_world(wrld)
+                    newCharacter = list(newWorld.characters.values())[0][0]
+                    newCharacter.move(charAction.value[0], charAction.value[1])
+                    newMonster = list(newWorld.monsters.values())[0][0]
+                    newMonster.move(act.value[0], act.value[1])
+                    newWorld, _ = newWorld.next()
+
+                    # If kill action possible, take that with probability 1.0
+                    events = [event.tpe for event in newWorld.events]
+                    if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+                        possibleWorlds = [(newWorld, 1)]
+                        break
+                    else:
+                        possibleWorlds.append((newWorld, 1/numWorlds))
 
             return possibleWorlds
 
