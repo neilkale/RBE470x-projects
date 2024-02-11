@@ -25,8 +25,8 @@ import math
 MAX_DEPTH = 1
 VERBOSE = False
 WIN_HEURISTIC = 100
-LOSE_HEURISTIC = -100
-HEURISTIC_EVAL_BOUND = 30
+LOSE_HEURISTIC = -1000
+HEURISTIC_EVAL_BOUND = 80
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -58,11 +58,12 @@ class ExpectimaxCharacter(CharacterEntity):
         # TODO: If the character is closer to the end state than the monster, use A* move.
         pathToGoal = AStar.a_star(wrld, (self.x, self.y), wrld.exitcell)
         useAStar = True
-        for monster in list(wrld.monsters.values())[0]:
+        for i in range(len(list(wrld.monsters.values()))):
+            monster = list(wrld.monsters.values())[i][0]
             monsterPathToGoal = AStar.a_star(wrld, (monster.x, monster.y), wrld.exitcell)
-            if (len(pathToGoal) >= len(monsterPathToGoal)):
+            if (len(pathToGoal)+1 >= len(monsterPathToGoal)):
                 useAStar = False
-        if useAStar:
+        if len(list(wrld.monsters.values())) == 0 or useAStar:
             self.move(pathToGoal[0][0] - self.x, pathToGoal[0][1] - self.y)
         else:
             # Else, start the expectimax search from the current state
@@ -212,9 +213,47 @@ class ExpectimaxCharacter(CharacterEntity):
                     else:
                         possibleWorlds.append((newWorld, 1/numWorlds))
 
-            return possibleWorlds
+        elif (len(wrld.monsters.values()) == 2):
+            monster1 = list(wrld.monsters.values())[0][0]
+            monster2 = list(wrld.monsters.values())[0][0]
 
+        return possibleWorlds
 
+    # CODE FOR GENERATING WORLDS MONTE-CARLO STYLE... NOT WORKING AT THE MOMENT
+    # worlds = {}
+    #         for i in range(100):
+    #             newWorld = SensedWorld.from_world(wrld)
+    #             # Make character move
+    #             newCharacter = list(newWorld.characters.values())[0][0]
+    #             newCharacter.move(charAction.value[0], charAction.value[1])
+    #             # Make monster move
+    #             for i in range(len(list(newWorld.monsters.values()))):
+    #                 list(newWorld.monsters.values())[i][0].do(newWorld)
+    #             newWorld, _ = newWorld.next()
+
+    #             worldExists = False
+    #             for oldWorld in worlds.keys():
+    #                 if (self.isSameWorld(oldWorld, newWorld)):
+    #                     worlds[oldWorld] += 1
+    #                     worldExists = True
+    #                     break
+    #             if not worldExists:
+    #                 worlds[newWorld] = 1
+    #         possibleWorlds = [(key, worlds[key]/100) for key in worlds.keys()]
+    
+    def isSameWorld(self, wrld1, wrld2):
+        # Character positions
+        if len(list(wrld1.characters.values())) != len(list(wrld2.characters.values())): return False
+        if len(list(wrld1.characters.values())) > 0 and len(list(wrld1.characters.values())[0]) > 0:
+            char1, char2 = list(wrld1.characters.values())[0][0], list(wrld2.characters.values())[0][0]
+            if char1.x != char2.x or char1.y != char2.y: return False
+        # Monster positions
+        if len(list(wrld1.monsters.values())) != len(list(wrld2.monsters.values())): return False
+        for i in range(len(list(wrld1.monsters.values()))):
+            monster1, monster2 = list(wrld1.monsters.values())[i][0], list(wrld2.monsters.values())[i][0]
+            if monster1.x != monster2.x or monster1.y != monster2.y: return False 
+        return True
+    
     def heuristic(self, wrld):
         events = [event.tpe for event in wrld.events]
         if (Event.CHARACTER_FOUND_EXIT in events): # If exit found, return really negative (good) heuristic
@@ -225,9 +264,9 @@ class ExpectimaxCharacter(CharacterEntity):
             character = list(wrld.characters.values())[0][0]
             U1 = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
             U2 = 0
-            for monster in list(wrld.monsters.values())[0]:
-                U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
-                # U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
+            # for monster in list(wrld.monsters.values())[0]:
+            #     U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
+            #     # U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
             return U1 - U2*0.1
         
     def manhattanDistance(self, a, b):
