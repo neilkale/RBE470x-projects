@@ -24,6 +24,9 @@ import math
 
 MAX_DEPTH = 1
 VERBOSE = False
+WIN_HEURISTIC = 100
+LOSE_HEURISTIC = -100
+HEURISTIC_EVAL_BOUND = 30
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -53,13 +56,20 @@ class ExpectimaxCharacter(CharacterEntity):
         Output: The best action determined by expectimax (e.g., move direction).
         """
         # TODO: If the character is closer to the end state than the monster, use A* move.
-
-        # Else, start the expectimax search from the current state
-        if VERBOSE: print("--------------- ACTION ---------------------")
-        action, _ = self.expectimax(wrld, depth=0)
-
-        # Execute the action
-        self.takeAction(action)
+        pathToGoal = AStar.a_star(wrld, (self.x, self.y), wrld.exitcell)
+        useAStar = True
+        for monster in list(wrld.monsters.values())[0]:
+            monsterPathToGoal = AStar.a_star(wrld, (monster.x, monster.y), wrld.exitcell)
+            if (len(pathToGoal) >= len(monsterPathToGoal)):
+                useAStar = False
+        if useAStar:
+            self.move(pathToGoal[0][0] - self.x, pathToGoal[0][1] - self.y)
+        else:
+            # Else, start the expectimax search from the current state
+            if VERBOSE: print("--------------- ACTION ---------------------")
+            action, _ = self.expectimax(wrld, depth=0)
+            # Execute the action
+            self.takeAction(action)
 
     def takeAction(self, action):
         """
@@ -107,7 +117,7 @@ class ExpectimaxCharacter(CharacterEntity):
             # possibleWorld.printit()
             heuristic = self.heuristic(possibleWorld)
             if VERBOSE: print(heuristic, " ", probability)
-            if (depth >= MAX_DEPTH or abs(heuristic) >= 100):
+            if (depth >= MAX_DEPTH or abs(heuristic) >= HEURISTIC_EVAL_BOUND):
                 if VERBOSE: print("HEURISTIC USED")
                 score += heuristic*probability
             else:
@@ -180,7 +190,7 @@ class ExpectimaxCharacter(CharacterEntity):
 
                 # If kill action not possible, and same action as last time is possible, take that action
                 lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
-                if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 3 and lastAction != ActionSet.BOMB and lastAction in actions):
+                if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 4 and lastAction != ActionSet.BOMB and lastAction in actions):
                     if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
                     actions = [lastAction]
                 numWorlds = len(actions)
@@ -208,16 +218,16 @@ class ExpectimaxCharacter(CharacterEntity):
     def heuristic(self, wrld):
         events = [event.tpe for event in wrld.events]
         if (Event.CHARACTER_FOUND_EXIT in events): # If exit found, return really negative (good) heuristic
-            return -100
+            return LOSE_HEURISTIC
         if (Event.CHARACTER_KILLED_BY_MONSTER in events or Event.BOMB_HIT_CHARACTER in events): # If character kiled, return really positive (bad) heuristic.
-            return 100
+            return WIN_HEURISTIC
         else:
             character = list(wrld.characters.values())[0][0]
             U1 = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
             U2 = 0
-            # for monster in list(wrld.monsters.values())[0]:
-            #     # U2 += 10 / AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y)) ** 2 # distance to each monster
-            #     U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
+            for monster in list(wrld.monsters.values())[0]:
+                U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
+                # U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
             return U1 - U2*0.1
         
     def manhattanDistance(self, a, b):
@@ -266,6 +276,9 @@ class AStar():
         :return        list[tuple[int, int]]    The path i.e. list of points (grid coord)
         """
 
+        if (start == goal):
+            return []
+
         frontier = PriorityQueue() # frontier 
         frontier.put(start,0) # adding the start to the frontier 
         came_from = {} # list of linked list of the path to each node
@@ -279,7 +292,7 @@ class AStar():
             current = frontier.get() # get the first node
             if current == goal: # reached to the goal
                 break 
-            for next in AStar.getNeighborsOfEight(current, wrld): # get the list of neighbors 
+            for next in AStar.getNeighborsOfEight(current, wrld, goal): # get the list of neighbors 
                 # calculate the new cost
                 new_cost = cost_so_far[current] + 1 
                 heuristic = AStar.heuristic(goal, next)
@@ -302,7 +315,7 @@ class AStar():
         # return the path
         return path
         
-    def getNeighborsOfEight(cell: tuple[int,int], wrld: World):
+    def getNeighborsOfEight(cell: tuple[int,int], wrld: World, goal: tuple[int, int]):
         # List of empty cells
         neighbors = []
         x,y = cell
@@ -315,7 +328,7 @@ class AStar():
                     if ((y + dy >= 0) and (y + dy < wrld.height())):
                         # Is this cell safe and not a non-move?
                         if  (wrld.exit_at(x + dx, y + dy) or
-                        wrld.empty_at(x + dx, y + dy)):
+                        wrld.empty_at(x + dx, y + dy) or (x + dx, y + dy) == goal):
                             # Yes
                             neighbors.append((dx, dy))
         # All done

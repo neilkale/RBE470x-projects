@@ -10,8 +10,8 @@ from monsters.stupid_monster import StupidMonster
 from monsters.selfpreserving_monster import SelfPreservingMonster
 
 # TODO This is your code!
-sys.path.insert(1, '../teamNN')
-from testcharacter import TestCharacter
+sys.path.insert(1, '../team01')
+from expectimaxcharacter import ExpectimaxCharacter
 
 # Create the game
 # random.seed(123) # TODO Change this if you want different random choices
@@ -23,11 +23,11 @@ g.add_monster(StupidMonster("stupid", # name
 g.add_monster(SelfPreservingMonster("aggressive", # name
                                     "A",          # avatar
                                     3, 13,        # position
-                                    1             # detection range
+                                    2             # detection range
 ))
 
 # TODO Add your character
-g.add_character(TestCharacter("me", # name
+g.add_character(ExpectimaxCharacter("me", # name
                               "C",  # avatar
                               0, 0  # position
 ))
