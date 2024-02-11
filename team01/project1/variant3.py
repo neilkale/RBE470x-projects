@@ -35,4 +35,4 @@ g.add_character(ExpectimaxCharacter("me", # name
 # ))
 
 # Run!
-g.go()
+g.go(wait=1)
