@@ -1,4 +1,5 @@
 # This is necessary to find the main code
+from itertools import islice
 import sys
 
 from events import Event
@@ -22,9 +23,9 @@ from enum import Enum
 import numpy as np
 import math
 
-MAX_DEPTH = 1
+MAX_DEPTH = 0
 VERBOSE = False
-WIN_HEURISTIC = 100
+WIN_HEURISTIC = 1000
 LOSE_HEURISTIC = -1000
 HEURISTIC_EVAL_BOUND = 80
 
@@ -68,6 +69,7 @@ class ExpectimaxCharacter(CharacterEntity):
         else:
             # Else, start the expectimax search from the current state
             if VERBOSE: print("--------------- ACTION ---------------------")
+            if VERBOSE: print("NUM MONSTERS:", len(wrld.monsters.values()))
             action, _ = self.expectimax(wrld, depth=0)
             # Execute the action
             self.takeAction(action)
@@ -107,7 +109,17 @@ class ExpectimaxCharacter(CharacterEntity):
         return bestAction, bestScore
 
     def evaluateChanceNode(self, wrld, action, depth):
-        possibleWorlds = self.simulateAction(wrld, action)
+        if (len(list(wrld.monsters.values())) == 1):
+            possibleWorlds = self.simulateAction(wrld, action)
+        if (len(list(wrld.monsters.values())) == 2):
+            possibleWorlds = []
+            possibleWorlds1 = self.simulateAction(wrld, action)
+            for (possibleWorld1, probability1) in possibleWorlds1:
+                if (len(list(possibleWorld1.characters.values())) == 0 or len(list(possibleWorld1.characters.values())[0]) == 0):
+                    possibleWorlds += [(possibleWorld1, probability1)]
+                else:
+                    possibleWorlds2 = self.simulateActionTwo(possibleWorld1, action)
+                    possibleWorlds += [(possibleWorld2, probability1*probability2) for (possibleWorld2, probability2) in possibleWorlds2]
         if VERBOSE: print("Num Worlds:", len(possibleWorlds))
         # possible_worlds is [(World, probability), (World, probability), ...]
         score = 0
@@ -148,76 +160,139 @@ class ExpectimaxCharacter(CharacterEntity):
     def simulateAction(self, wrld, charAction):
         possibleWorlds = []
         # Assume there is only one monster 
-        if (len(wrld.monsters.values()) == 1):
-            monster = list(wrld.monsters.values())[0][0]
-            actions = self.findPossibleMonsterActions(monster, wrld)
+        monster = list(wrld.monsters.values())[0][0]
+        actions = self.findPossibleMonsterActions(monster, wrld)
+        numWorlds = len(actions)
+        # Assume every future world is equally likely (stupid idiot monster)
+        if (monster.name == 'stupid'):
+            for act in actions:
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newCharacter.move(charAction.value[0], charAction.value[1])
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
+                possibleWorlds.append((newWorld, 1/numWorlds))
+        elif (monster.name == 'selfpreserving'):
+
+            # If kill action not possible, and same action as last time is possible, take that action
+            lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+            if (len(AStar.a_star(wrld, (self.x+charAction.value[0], self.y+charAction.value[1]), (monster.x, monster.y))) > 2 and lastAction != ActionSet.BOMB and lastAction in actions):
+                if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+                actions = [lastAction]
             numWorlds = len(actions)
-            # Assume every future world is equally likely (stupid idiot monster)
-            if (monster.name == 'stupid'):
-                for act in actions:
-                    newWorld = SensedWorld.from_world(wrld)
-                    newCharacter = list(newWorld.characters.values())[0][0]
-                    newCharacter.move(charAction.value[0], charAction.value[1])
-                    newMonster = list(newWorld.monsters.values())[0][0]
-                    newMonster.move(act.value[0], act.value[1])
-                    newWorld, _ = newWorld.next()
+
+            # Iterate through possible actions
+            for act in actions:
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newCharacter.move(charAction.value[0], charAction.value[1])
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
+
+                # If kill action possible, take that with probability 1.0
+                events = [event.tpe for event in newWorld.events]
+                if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+                    possibleWorlds = [(newWorld, 1)]
+                    break
+                else:
                     possibleWorlds.append((newWorld, 1/numWorlds))
-            elif (monster.name == 'selfpreserving'):
+        elif (monster.name == 'aggressive'):
+            # If kill action not possible, and same action as last time is possible, take that action
+            lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+            if (len(AStar.a_star(wrld, (self.x+charAction.value[0], self.y+charAction.value[1]), (monster.x, monster.y))) > 2 and lastAction != ActionSet.BOMB and lastAction in actions):
+                if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+                actions = [lastAction]
+            numWorlds = len(actions)
 
-                # If kill action not possible, and same action as last time is possible, take that action
-                lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
-                if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 2 and lastAction != ActionSet.BOMB and lastAction in actions):
-                    if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
-                    actions = [lastAction]
-                numWorlds = len(actions)
+            # Iterate through possible actions
+            for act in actions:
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newCharacter.move(charAction.value[0], charAction.value[1])
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
 
-                # Iterate through possible actions
-                for act in actions:
-                    newWorld = SensedWorld.from_world(wrld)
-                    newCharacter = list(newWorld.characters.values())[0][0]
-                    newCharacter.move(charAction.value[0], charAction.value[1])
-                    newMonster = list(newWorld.monsters.values())[0][0]
-                    newMonster.move(act.value[0], act.value[1])
-                    newWorld, _ = newWorld.next()
+                # If kill action possible, take that with probability 1.0
+                events = [event.tpe for event in newWorld.events]
+                if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+                    possibleWorlds = [(newWorld, 1)]
+                    break
+                # # If can chase the agent, take that with probability 1.0
+                # elif AStar.a_star(newWorld, (newCharacter.x, newCharacter.y), (newMonster.x, newMonster.y)):
+                #     possibleWorlds = [(newWorld, 1)]
+                else:
+                    possibleWorlds.append((newWorld, 1/numWorlds))
 
-                    # If kill action possible, take that with probability 1.0
-                    events = [event.tpe for event in newWorld.events]
-                    if (Event.CHARACTER_KILLED_BY_MONSTER in events):
-                        possibleWorlds = [(newWorld, 1)]
-                        break
-                    else:
-                        possibleWorlds.append((newWorld, 1/numWorlds))
-            elif (monster.name == 'aggressive'):
-                # If kill action not possible, and same action as last time is possible, take that action
-                lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
-                if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 4 and lastAction != ActionSet.BOMB and lastAction in actions):
-                    if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
-                    actions = [lastAction]
-                numWorlds = len(actions)
+        return possibleWorlds
 
-                # Iterate through possible actions
-                for act in actions:
-                    newWorld = SensedWorld.from_world(wrld)
-                    newCharacter = list(newWorld.characters.values())[0][0]
-                    newCharacter.move(charAction.value[0], charAction.value[1])
-                    newMonster = list(newWorld.monsters.values())[0][0]
-                    newMonster.move(act.value[0], act.value[1])
-                    newWorld, _ = newWorld.next()
+    def simulateActionTwo(self, wrld, charAction):
+        possibleWorlds = []
+        # Assume there is only one monster 
+        monster = list(wrld.monsters.values())[1][0]
+        actions = self.findPossibleMonsterActions(monster, wrld)
+        numWorlds = len(actions)
+        # Assume every future world is equally likely (stupid idiot monster)
+        if (monster.name == 'stupid'):
+            for act in actions:
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
+                possibleWorlds.append((newWorld, 1/numWorlds))
+        elif (monster.name == 'selfpreserving'):
 
-                    # If kill action possible, take that with probability 1.0
-                    events = [event.tpe for event in newWorld.events]
-                    if (Event.CHARACTER_KILLED_BY_MONSTER in events):
-                        possibleWorlds = [(newWorld, 1)]
-                        break
-                    # # If can chase the agent, take that with probability 1.0
-                    # elif AStar.a_star(newWorld, (newCharacter.x, newCharacter.y), (newMonster.x, newMonster.y)):
-                    #     possibleWorlds = [(newWorld, 1)]
-                    else:
-                        possibleWorlds.append((newWorld, 1/numWorlds))
+            # If kill action not possible, and same action as last time is possible, take that action
+            lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+            if (len(AStar.a_star(wrld, (self.x+charAction.value[0], self.y+charAction.value[1]), (monster.x, monster.y))) > 2 and lastAction != ActionSet.BOMB and lastAction in actions):
+                if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+                actions = [lastAction]
+            numWorlds = len(actions)
 
-        elif (len(wrld.monsters.values()) == 2):
-            monster1 = list(wrld.monsters.values())[0][0]
-            monster2 = list(wrld.monsters.values())[0][0]
+            # Iterate through possible actions
+            for act in actions:
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
+
+                # If kill action possible, take that with probability 1.0
+                events = [event.tpe for event in newWorld.events]
+                if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+                    possibleWorlds = [(newWorld, 1)]
+                    break
+                else:
+                    possibleWorlds.append((newWorld, 1/numWorlds))
+        elif (monster.name == 'aggressive'):
+            # If kill action not possible, and same action as last time is possible, take that action
+            lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+            if (len(AStar.a_star(wrld, (self.x+charAction.value[0], self.y+charAction.value[1]), (monster.x, monster.y))) > 4 and lastAction != ActionSet.BOMB and lastAction in actions):
+                if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+                actions = [lastAction]
+            numWorlds = len(actions)
+
+            # Iterate through possible actions
+            for act in actions:
+                newWorld = SensedWorld.from_world(wrld)
+                newCharacter = list(newWorld.characters.values())[0][0]
+                newMonster = list(newWorld.monsters.values())[0][0]
+                newMonster.move(act.value[0], act.value[1])
+                newWorld, _ = newWorld.next()
+
+                # If kill action possible, take that with probability 1.0
+                events = [event.tpe for event in newWorld.events]
+                if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+                    possibleWorlds = [(newWorld, 1)]
+                    break
+                # # If can chase the agent, take that with probability 1.0
+                # elif AStar.a_star(newWorld, (newCharacter.x, newCharacter.y), (newMonster.x, newMonster.y)):
+                #     possibleWorlds = [(newWorld, 1)]
+                else:
+                    possibleWorlds.append((newWorld, 1/numWorlds))
 
         return possibleWorlds
 
@@ -243,18 +318,18 @@ class ExpectimaxCharacter(CharacterEntity):
     #                 worlds[newWorld] = 1
     #         possibleWorlds = [(key, worlds[key]/100) for key in worlds.keys()]
     
-    def isSameWorld(self, wrld1, wrld2):
-        # Character positions
-        if len(list(wrld1.characters.values())) != len(list(wrld2.characters.values())): return False
-        if len(list(wrld1.characters.values())) > 0 and len(list(wrld1.characters.values())[0]) > 0:
-            char1, char2 = list(wrld1.characters.values())[0][0], list(wrld2.characters.values())[0][0]
-            if char1.x != char2.x or char1.y != char2.y: return False
-        # Monster positions
-        if len(list(wrld1.monsters.values())) != len(list(wrld2.monsters.values())): return False
-        for i in range(len(list(wrld1.monsters.values()))):
-            monster1, monster2 = list(wrld1.monsters.values())[i][0], list(wrld2.monsters.values())[i][0]
-            if monster1.x != monster2.x or monster1.y != monster2.y: return False 
-        return True
+    # def isSameWorld(self, wrld1, wrld2):
+    #     # Character positions
+    #     if len(list(wrld1.characters.values())) != len(list(wrld2.characters.values())): return False
+    #     if len(list(wrld1.characters.values())) > 0 and len(list(wrld1.characters.values())[0]) > 0:
+    #         char1, char2 = list(wrld1.characters.values())[0][0], list(wrld2.characters.values())[0][0]
+    #         if char1.x != char2.x or char1.y != char2.y: return False
+    #     # Monster positions
+    #     if len(list(wrld1.monsters.values())) != len(list(wrld2.monsters.values())): return False
+    #     for i in range(len(list(wrld1.monsters.values()))):
+    #         monster1, monster2 = list(wrld1.monsters.values())[i][0], list(wrld2.monsters.values())[i][0]
+    #         if monster1.x != monster2.x or monster1.y != monster2.y: return False 
+    #     return True
     
     def heuristic(self, wrld):
         events = [event.tpe for event in wrld.events]
@@ -269,10 +344,12 @@ class ExpectimaxCharacter(CharacterEntity):
             for i in range(len(list(wrld.monsters.values()))):
                 monster = list(wrld.monsters.values())[i][0]
                 distToMonster = len(AStar.a_star(wrld, (character.x, character.y), (monster.x, monster.y)))
-                if monster.name == "selfpreserving" and distToMonster <= 1:
-                    U2 += 100
-                elif monster.name == "aggressive" and distToMonster <= 2:
-                    U2 += 100
+                if monster.name == "selfpreserving" and distToMonster <= 2:
+                    U2 += 100 #*(2-distToMonster)
+                elif monster.name == "stupid" and distToMonster <= 1:
+                    U2 += 50 #*(1-distToMonster)
+                elif monster.name == "aggressive" and distToMonster <= 3:
+                    U2 += 100 #*(3-distToMonster)
             # for monster in list(wrld.monsters.values())[0]:
             #     U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
             #     # U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
