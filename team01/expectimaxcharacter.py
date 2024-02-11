@@ -188,7 +188,6 @@ class ExpectimaxCharacter(CharacterEntity):
                     else:
                         possibleWorlds.append((newWorld, 1/numWorlds))
             elif (monster.name == 'aggressive'):
-
                 # If kill action not possible, and same action as last time is possible, take that action
                 lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
                 if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 4 and lastAction != ActionSet.BOMB and lastAction in actions):
@@ -210,6 +209,9 @@ class ExpectimaxCharacter(CharacterEntity):
                     if (Event.CHARACTER_KILLED_BY_MONSTER in events):
                         possibleWorlds = [(newWorld, 1)]
                         break
+                    # # If can chase the agent, take that with probability 1.0
+                    # elif AStar.a_star(newWorld, (newCharacter.x, newCharacter.y), (newMonster.x, newMonster.y)):
+                    #     possibleWorlds = [(newWorld, 1)]
                     else:
                         possibleWorlds.append((newWorld, 1/numWorlds))
 
@@ -263,11 +265,18 @@ class ExpectimaxCharacter(CharacterEntity):
         else:
             character = list(wrld.characters.values())[0][0]
             U1 = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
-            U2 = 0
+            U2 = 0 # Penalty for being too close to a chasing monster
+            for i in range(len(list(wrld.monsters.values()))):
+                monster = list(wrld.monsters.values())[i][0]
+                distToMonster = len(AStar.a_star(wrld, (character.x, character.y), (monster.x, monster.y)))
+                if monster.name == "selfpreserving" and distToMonster <= 1:
+                    U2 += 100
+                elif monster.name == "aggressive" and distToMonster <= 2:
+                    U2 += 100
             # for monster in list(wrld.monsters.values())[0]:
             #     U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
             #     # U2 += 10 / math.dist((character.x, character.y), (monster.x,monster.y))
-            return U1 - U2*0.1
+            return U1 + U2
         
     def manhattanDistance(self, a, b):
         return abs(a[0]-b[0])+abs(a[1]-b[1])
