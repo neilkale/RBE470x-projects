@@ -23,10 +23,10 @@ from enum import Enum
 import numpy as np
 import math
 
-MAX_DEPTH = 1
+MAX_DEPTH = 0
 VERBOSE = False
-WIN_HEURISTIC = 1000
-LOSE_HEURISTIC = -1000
+WIN_HEURISTIC = 500
+LOSE_HEURISTIC = -500
 HEURISTIC_EVAL_BOUND = 80
 
 # possible action set that the character can take
@@ -231,6 +231,8 @@ class ExpectimaxCharacter(CharacterEntity):
 
     def simulateActionTwo(self, wrld, charAction):
         possibleWorlds = []
+        if len(list(wrld.monsters.values())) < 2:
+            return [(wrld, 1)]
         # Assume there is only one monster 
         monster = list(wrld.monsters.values())[1][0]
         actions = self.findPossibleMonsterActions(monster, wrld)
@@ -345,11 +347,11 @@ class ExpectimaxCharacter(CharacterEntity):
             for i in range(len(list(wrld.monsters.values()))):
                 monster = list(wrld.monsters.values())[i][0]
                 distToMonster = len(AStar.a_star(wrld, (character.x, character.y), (monster.x, monster.y)))
-                if monster.name == "selfpreserving" and distToMonster <= 1:
+                if monster.name == "selfpreserving" and distToMonster <= 2:
                     U2 += 100 #*(2-distToMonster)
                 elif monster.name == "stupid" and distToMonster <= 1:
                     U2 += 50 #*(1-distToMonster)
-                elif monster.name == "aggressive" and distToMonster <= 2:
+                elif monster.name == "aggressive" and distToMonster <= 3:
                     U2 += 100 #*(3-distToMonster)
             # for monster in list(wrld.monsters.values())[0]:
             #     U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
