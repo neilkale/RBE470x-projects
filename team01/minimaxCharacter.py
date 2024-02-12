@@ -28,10 +28,18 @@ class ActionSet(Enum):
     WN = (-1,-1)
     BOMB = (0,0)
 
-inf = 100.0 
-MAX_DEPTH = 2
+    @staticmethod
+    def from_tuple(input_tuple):
+        for action in ActionSet:
+            if action.value == input_tuple:
+                return action
+        return None
 
-VERBOSE = True
+inf = 100.0 
+MAX_DEPTH = 1
+
+VERBOSE = False
+
 class MinimaxCharacter(CharacterEntity):
 
     def do(self, wrld):
@@ -44,7 +52,7 @@ class MinimaxCharacter(CharacterEntity):
         # Start the expectimax search from the current state
         if VERBOSE: print("**************here in do*************")
         print("***************------------------------------***************")
-        action = self.minimax(wrld, depth=0)
+        action, _ = self.minimax(wrld, depth=0)
 
         if VERBOSE: print("Action: ", action)
 
@@ -60,7 +68,7 @@ class MinimaxCharacter(CharacterEntity):
         if action == ActionSet.BOMB:
             self.place_bomb()
         else:
-            self.move(action[0],action[1])
+            self.move(action.value[0],action.value[1])
 
     def minimax(self, wrld, depth):
         """
@@ -78,11 +86,11 @@ class MinimaxCharacter(CharacterEntity):
 
         # Start the search 
         for action in possibleActions:
-            nextWorld = self.simulateActionSimple(wrld,action)
-            if VERBOSE: print("Next world:", nextWorld)
-            score = self.minValue(nextWorld, depth)
+            allPossibleWorlds = self.simulateActionSimple(wrld,action)
+            if VERBOSE: print("Next world (Action: ", action, "): ", allPossibleWorlds)
+            score = self.minValue(allPossibleWorlds, depth)
 
-            if VERBOSE: print ("Score: ", score)
+            if VERBOSE: print ("Score: ", score, "Action: ", action)
 
             if score <= bestScore:
                 bestScore = score
@@ -96,26 +104,21 @@ class MinimaxCharacter(CharacterEntity):
         - wrld: The current state of the world.
         Output: The maximum utility value
         """
-        if self.terminalState(wrld) or depth > MAX_DEPTH:    
+        if VERBOSE: print("\nMAX NODE\n", "Depth: ", depth)
+        if self.terminalState(wrld,depth):    
             if VERBOSE: print("Terminal state Max node, Heuristic: ", self.heuristic(wrld))
             return self.heuristic(wrld)
         
         v = -inf
-        print("\nMAX NODE\n", "Depth: ", depth)
         possibleActions = self.findPossibleActions(wrld)
-        print("possibleActions", possibleActions)
+        if VERBOSE: print("possibleActions", possibleActions)
 
         for action in possibleActions:
-            heuri = self.heuristic(wrld)
-            if (depth > MAX_DEPTH):
-                if VERBOSE: print("MAX DEPTH REACHED")
-                v = heuri
-            else:
-                next_wrld = self.simulateActionSimple(wrld, action)
-                print("Max V", v)
-                v = max(v,self.minValue(next_wrld, depth + 1))
+            allPossibleWorlds = self.simulateActionSimple(wrld,action)
+            v = max(v,self.minValue(allPossibleWorlds, depth + 1))
             
-        print ("Max Value: ", v)
+            
+        if VERBOSE: print ("Max Value: ", v)
 
         return v
     
@@ -127,8 +130,8 @@ class MinimaxCharacter(CharacterEntity):
         - wrld: The current state of the world.
         Output: The minimum utility value
         """
-        print("\nMIN NODE\n", "Depth: ", depth)
-        if self.terminalState(wrld) or depth > MAX_DEPTH:   
+        if VERBOSE: print("\nMIN NODE\n", "Depth: ", depth)
+        if self.terminalState(wrld, depth):   
             if VERBOSE: print("Terminal State min node, Heuristic: ", self.heuristic(wrld)) 
             return self.heuristic(wrld)
         
@@ -138,21 +141,17 @@ class MinimaxCharacter(CharacterEntity):
         if VERBOSE: print("Possible Action", possibleActions)
 
         for action in possibleActions:
-            if (depth > MAX_DEPTH):
-                if VERBOSE: print("MAX DEPTH REACHED")
-                v = self.heuristic(wrld)
-            else:
-                next_wrld = self.simulateActionSimple(wrld, action)
-                # if VERBOSE: print("Depth", depth, "Next World", next_wrld)
-                v = min(v,self.maxValue(next_wrld, depth+1))
+            allPossibleWorlds = self.simulateActionSimple(wrld,action)
+            # if VERBOSE: print("Depth", depth, "Next World", next_wrld)
+            v = min(v,self.maxValue(allPossibleWorlds, depth+1))
                 
-            
-        print ("Min Value: ", v)
+        if VERBOSE: print ("Min Value: ", v)
         return v
         
-    def terminalState(self, wrld):
+    def terminalState(self, wrld, depth):
         events = [event.tpe for event in wrld.events]
-        if (Event.CHARACTER_FOUND_EXIT in events or Event.BOMB_HIT_CHARACTER in events or Event.CHARACTER_KILLED_BY_MONSTER in events):
+        if (Event.CHARACTER_FOUND_EXIT in events or Event.BOMB_HIT_CHARACTER in events or Event.CHARACTER_KILLED_BY_MONSTER in events
+            or depth > MAX_DEPTH):
             return True
         return False
 
@@ -160,17 +159,29 @@ class MinimaxCharacter(CharacterEntity):
     def heuristic(self, wrld):
         events = [event.tpe for event in wrld.events]
         if (Event.CHARACTER_FOUND_EXIT in events): # yay we are wining, return good heuristics (negative for us)
+            if VERBOSE: print("Character found exit ayay")
             return -inf
-        elif (Event.CHARACTER_KILLED_BY_MONSTER or Event.BOMB_HIT_CHARACTER): # no we dont want this, return bad heuristic (posiitve)
+        elif (Event.CHARACTER_KILLED_BY_MONSTER in events or Event.BOMB_HIT_CHARACTER in events): # no we dont want this, return bad heuristic (posiitve)
+            if VERBOSE: print("Character died :()")
             return inf
         character = list(wrld.characters.values())[0][0]
         monster = list(wrld.monsters.values())[0][0]
-        # charDistToExit = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
+        character = list(wrld.characters.values())[0][0]
+        charDistToExit = len(AStar.a_star(wrld, (character.x, character.y), wrld.exitcell)) # distance to exit cell
+        charDistToMonster = 0 # Penalty for being too close to a chasing monster
         charDistToMonster = AStar.euclidean_distance((character.x,character.y), (monster.x,monster.y))
-        charDistToExit = AStar.euclidean_distance((character.x,character.y), wrld.exitcell)
-        return charDistToExit - charDistToExit
-
-
+        
+        # for i in range(len(list(wrld.monsters.values()))):
+        #     monster = list(wrld.monsters.values())[i][0]
+        #     distToMonster = len(AStar.a_star(wrld, (character.x, character.y), (monster.x, monster.y)))
+        #     if monster.name == "selfpreserving" and distToMonster <= 1:
+        #         charDistToMonster += 100
+        #     elif monster.name == "aggressive" and distToMonster <= 2:
+        #         charDistToMonster += 100
+        #         if VERBOSE: print("Dist to Monster: ", charDistToMonster)
+        # if VERBOSE: print("Dist to Exit: ", charDistToExit)
+        return charDistToExit - charDistToMonster
+    
     def simulateActionSimple(self, wrld, charAction):
         newWrld = SensedWorld.from_world(wrld)
 
@@ -190,6 +201,56 @@ class MinimaxCharacter(CharacterEntity):
             return newWrld
         return wrld
 
+
+    # def simulateActionSimple(self, wrld, charAction):
+    #     newWorld = SensedWorld.from_world(wrld)
+    #     newCharacter = list(newWorld.characters.values())[0][0]
+    #     newCharacter.move(charAction.value[0], charAction.value[1])
+    #     # Assume there is only one monster 
+    #     if (len(wrld.monsters.values()) == 1):
+    #         monster = list(wrld.monsters.values())[0][0]
+    #         actions = self.findPossibleMonsterActions(monster, wrld)
+
+    #         if (monster.name == 'selfpreserving'):
+    #             # If kill action not possible, and same action as last time is possible, take that action
+    #             lastAction = ActionSet.from_tuple((monster.dx, monster.dy))
+    #             if (self.manhattanDistance((monster.x, monster.y), (self.x+charAction.value[0], self.y+charAction.value[1])) > 2 and lastAction != ActionSet.BOMB and lastAction in actions):
+    #                 if VERBOSE: print ("OLD ACTION TO REPEAT:", lastAction)
+    #                 actions = [lastAction]
+    #             # numWorlds = len(actions)
+
+    #             # Iterate through possible actions
+    #             for act in actions:
+    #                 newMonster = list(newWorld.monsters.values())[0][0]
+    #                 newMonster.move(act.value[0], act.value[1])
+    #                 newWorld, _ = newWorld.next()
+
+    #                 # If kill action possible, take that with probability 1.0
+    #                 events = [event.tpe for event in newWorld.events]
+    #                 if (Event.CHARACTER_KILLED_BY_MONSTER in events):
+    #                     possibleWorlds = [(newWorld, 1)]
+    #                     break
+    #                 else:
+    #                     possibleWorlds.append((newWorld))
+    #     return possibleWorlds
+
+
+    # def simulateActionSimple(self, wrld, charAction):
+    #     possibleWorlds = []
+    #     # Assume there is only one monster 
+    #     if (len(wrld.monsters.values()) == 1):
+    #         monster = list(wrld.monsters.values())[0][0]
+    #         monsterActions = self.findPossibleMonsterActions(monster, wrld)
+    #         numWorlds = len(monsterActions)
+    #         for act in monsterActions:
+    #             newWorld = SensedWorld.from_world(wrld)
+    #             newCharacter = list(newWorld.characters.values())[0][0]
+    #             newCharacter.move(charAction.value[0], charAction.value[1])
+    #             newMonster = list(newWorld.monsters.values())[0][0]
+    #             newMonster.move(act.value[0], act.value[1])
+    #             newWorld, _ = newWorld.next()
+    #             possibleWorlds.append((newWorld))
+    #     return possibleWorlds
     
     def findPossibleMonsterActions(self, monster, wrld): 
         """ finds all the possible actions that can be taken
@@ -220,6 +281,9 @@ class MinimaxCharacter(CharacterEntity):
                             wrld.empty_at(self.x + dx, self.y + dy)):
                         possibleActions.append(action)
         return possibleActions  
+    
+    def manhattanDistance(self, a, b):
+        return abs(a[0]-b[0])+abs(a[1]-b[1])
 
 class AStar():
 
@@ -231,6 +295,9 @@ class AStar():
         :goal: tuple[int, int]                 The goal position (grid coord)
         :return        list[tuple[int, int]]    The path i.e. list of points (grid coord)
         """
+
+        if (start == goal):
+            return []
 
         frontier = PriorityQueue() # frontier 
         frontier.put(start,0) # adding the start to the frontier 
@@ -245,7 +312,7 @@ class AStar():
             current = frontier.get() # get the first node
             if current == goal: # reached to the goal
                 break 
-            for next in AStar.getNeighborsOfEight(current, wrld): # get the list of neighbors 
+            for next in AStar.getNeighborsOfEight(current, wrld, goal): # get the list of neighbors 
                 # calculate the new cost
                 new_cost = cost_so_far[current] + 1 
                 heuristic = AStar.heuristic(goal, next)
@@ -268,7 +335,7 @@ class AStar():
         # return the path
         return path
         
-    def getNeighborsOfEight(cell: tuple[int,int], wrld: World):
+    def getNeighborsOfEight(cell: tuple[int,int], wrld: World, goal: tuple[int, int]):
         # List of empty cells
         neighbors = []
         x,y = cell
@@ -281,7 +348,7 @@ class AStar():
                     if ((y + dy >= 0) and (y + dy < wrld.height())):
                         # Is this cell safe and not a non-move?
                         if  (wrld.exit_at(x + dx, y + dy) or
-                        wrld.empty_at(x + dx, y + dy)):
+                        wrld.empty_at(x + dx, y + dy) or (x + dx, y + dy) == goal):
                             # Yes
                             neighbors.append((dx, dy))
         # All done
@@ -293,8 +360,3 @@ class AStar():
                 
     def euclidean_distance(cell1, cell2):
         return math.dist(cell1, cell2)
-
-    
-
-    
-

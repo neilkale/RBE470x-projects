@@ -22,17 +22,17 @@ g.add_monster(SelfPreservingMonster("selfpreserving", # name
                                     1                 # detection range
 ))
 
-# # TODO Add your character
-g.add_character(ExpectimaxCharacter("me", # name
-                              "C",  # avatar
-                              0, 0  # position
-))
-
-# TODO Add your character
-# g.add_character(MinimaxCharacter("minimaxMe", # name
+# # # TODO Add your character
+# g.add_character(ExpectimaxCharacter("me", # name
 #                               "C",  # avatar
 #                               0, 0  # position
 # ))
+
+# TODO Add your character
+g.add_character(MinimaxCharacter("minimaxMe", # name
+                              "C",  # avatar
+                              0, 0  # position
+))
 
 # Run!
 g.go(wait=1)
