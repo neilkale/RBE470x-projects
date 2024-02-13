@@ -351,7 +351,7 @@ class ExpectimaxCharacter(CharacterEntity):
                     U2 += 100 #*(2-distToMonster)
                 elif monster.name == "stupid" and distToMonster <= 1:
                     U2 += 50 #*(1-distToMonster)
-                elif monster.name == "aggressive" and distToMonster <= 3:
+                elif monster.name == "aggressive" and distToMonster <= 2:
                     U2 += 100 #*(3-distToMonster)
             # for monster in list(wrld.monsters.values())[0]:
             #     U2 += 10 / len(AStar.a_star(wrld, (character.x, character.y), (monster.x,monster.y))) ** 2 # distance to each monster
