@@ -79,18 +79,21 @@ class TrainCharacter(CharacterEntity):
     # Compute the f-values required to compute the Q-value for a state-action pair
     def getFeatures(self, s, a):
         MAXDIST = s.width() + s.height() # world height and wrld grid
+        char_x = self.x + a.value[0]
+        char_y = self.y + a.value[1]
+
         # fs should be normalized from 0 to 1
-        f_e = manhattanDist((self.x,self.y), s.exitcell) #manhattan dist to the exit 
+        f_e = manhattanDist((char_x,char_y), s.exitcell) #manhattan dist to the exit 
 
         f_m = MAXDIST
         for i in range(len(list(s.monsters.values()))):
             monster = list(s.monsters.values())[i][0]
-            f_m = manhattanDist((self.x,self.y), (monster.x,monster.y)) #manhattan dist to the monster 
+            f_m = manhattanDist((char_x,char_y), (monster.x,monster.y)) #manhattan dist to the monster 
         
         f_x = MAXDIST
         for i in range(len(list(s.monsters.values()))):
             explosion = list(s.explosion.values())[i][0]
-            f_x = manhattanDist((self.x,self.y), (explosion.x,explosion.y)) #manhattan dist to the explosion
+            f_x = manhattanDist((char_x,char_y), (explosion.x,explosion.y)) #manhattan dist to the explosion
         
         # normalization
         f_e /= MAXDIST
