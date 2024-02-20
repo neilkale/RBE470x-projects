@@ -1,17 +1,22 @@
 # This is necessary to find the main code
 from enum import Enum
+from random import random
 import sys
 sys.path.insert(0, '../bomberman')
+sys.path.insert(1, '..')
 # Import necessary stuff
 from entity import CharacterEntity
 from colorama import Fore, Back
 import numpy as np
 from events import Event
+from icecream import ic
 
 s, a = None, None
 GAMMA = 0.8 #tune value
 ALPHA = 0.7 #tune value
-WEIGHTS_FILE_NAME = "weights.txt"
+EPSILON = 0.8 #tune value
+WEIGHTS_FILE_NAME = "weights.npy"
+VERBOSE = True
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -30,7 +35,7 @@ class TrainCharacter(CharacterEntity):
 
     def __init__(self, name, avatar, x, y):
         super().__init__(name, avatar, x, y)
-        self.w = readFile(WEIGHTS_FILE_NAME) # (w1, w2, w3)
+        self.w = np.load(WEIGHTS_FILE_NAME) # readFile(WEIGHTS_FILE_NAME) # (w1, w2, w3)
         
     def do(self, s_prime):
         global s,a 
@@ -44,27 +49,35 @@ class TrainCharacter(CharacterEntity):
             # Compute delta
             delta = r + GAMMA * max([self.getQValue(s_prime,a_prime) for a_prime in self.getActions(s_prime)]) - self.getQValue(s,a)
             # Update the weights
-            w += ALPHA * delta * self.getFValues(s,a)
+            self.w += ALPHA * delta * self.getFeatures(s,a)
 
         # Set s = s'
         s = s_prime
         # Find all possible actions and their Q-values
         actions = self.getActions(s)
         qValues = [self.getQValue(s,a) for a in actions]
+        if VERBOSE: ic(actions)
+        if VERBOSE: ic([self.getFeatures(s,a) for a in actions])
+
+        if VERBOSE: ic(self.w)
+
+        if VERBOSE: ic(qValues)
+
         a = self.selectAction(actions, qValues)
-        # Take the action
-        self.takeAction(a)
 
         if isTerminalState(s):
-            writeFile(self.w)
+            np.save(WEIGHTS_FILE_NAME, self.w)
+
+        # Take the action
+        self.takeAction(a)
     
     # Compute the Q-value for the inputted state-action pair.
     def getQValue(self, s, a):
-        f = self.getFValues(s, a)
+        f = self.getFeatures(s, a)
         return np.dot(self.w, f)
 
     # Compute the f-values required to compute the Q-value for a state-action pair
-    def getFValues(self, s, a):
+    def getFeatures(self, s, a):
         MAXDIST = s.width() + s.height() # world height and wrld grid
         # fs should be normalized from 0 to 1
         f_e = manhattanDist((self.x,self.y), s.exitcell) #manhattan dist to the exit 
@@ -84,7 +97,7 @@ class TrainCharacter(CharacterEntity):
         f_m /= MAXDIST
         f_x /= MAXDIST
 
-        return (f_e, f_m, f_x)
+        return np.array([f_e, f_m, f_x])
         
     def takeAction(self, action):
         """
@@ -113,8 +126,12 @@ class TrainCharacter(CharacterEntity):
                         possibleActions.append(action)
         return possibleActions
     
-    def selectAction(self, action, qValues):
-        pass
+    def selectAction(self, actions, qValues):
+        if random() < EPSILON:
+            idx = np.argmax(qValues)
+        else:
+            idx = int(random() * len(actions))
+        return actions[idx]
         
 # Returns the reward of state s based on the events in s
 def getReward(s):

@@ -8,14 +8,14 @@ from game import Game
 
 # TODO This is your code!
 sys.path.insert(1, '../team02')
-from testcharacter import TestCharacter
+from traincharacter import TrainCharacter
 
 
 # Create the game
 g = Game.fromfile('map.txt')
 
 # TODO Add your character
-g.add_character(TestCharacter("me", # name
+g.add_character(TrainCharacter("me", # name
                               "C",  # avatar
                               0, 0  # position
 ))

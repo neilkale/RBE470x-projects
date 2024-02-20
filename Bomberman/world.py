@@ -380,11 +380,14 @@ class World:
             elif e.tpe == Event.BOMB_HIT_MONSTER:
                 self.scores[e.character.name] = self.scores[e.character.name] + 50
             elif e.tpe == Event.BOMB_HIT_CHARACTER:
+                e.character.do(self) ### TODO: REMOVE THIS LINE, ONLY USE FOR TRAINING
                 if e.character != e.other:
                     self.scores[e.character.name] = self.scores[e.character.name] + 100
             elif e.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
+                e.character.do(self) ### TODO: REMOVE THIS LINE, ONLY USE FOR TRAINING
                 self.remove_character(e.character)
             elif e.tpe == Event.CHARACTER_FOUND_EXIT:
+                e.character.do(self) ### TODO: REMOVE THIS LINE, ONLY USE FOR TRAINING
                 self.scores[e.character.name] = self.scores[e.character.name] + 2 * self.time
         for k,clist in self.characters.items():
             for c in clist:
