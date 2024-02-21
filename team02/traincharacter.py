@@ -46,7 +46,8 @@ class TrainCharacter(CharacterEntity):
 
     def __init__(self, name, avatar, x, y):
         super().__init__(name, avatar, x, y)
-        self.w = np.load(WEIGHTS_FILE_NAME) # readFile(WEIGHTS_FILE_NAME) # (w1, w2, w3)
+        self.w =  np.load(WEIGHTS_FILE_NAME) # np.array([1.,1.,1.,1.]) # (w1, w2, w3, w4)
+        # self.w = self.w - np.mean(self.w) / np.std(self.w)
         
     def do(self, s_prime):
         global s,a 
@@ -106,12 +107,18 @@ class TrainCharacter(CharacterEntity):
             explosion = list(s.explosion.values())[i][0]
             f_x = aStarDist(s, (char_x,char_y), (explosion.x,explosion.y)) #aStar dist to the explosion
         
+        f_b = MAXDIST
+        for i in range(len(list(s.monsters.values()))):
+            bomb = list(s.bombs.values())[i][0]
+            f_x = aStarDist(s, (char_x,char_y), (bomb.x,bomb.y)) #aStar dist to the bombs
+
         # normalization
         f_e /= MAXDIST
         f_m /= MAXDIST
         f_x /= MAXDIST
+        f_b /= MAXDIST
 
-        return np.array([f_e, f_m, f_x])
+        return np.array([f_e, f_m, f_x, f_b])
         
     def takeAction(self, action):
         """
@@ -150,7 +157,9 @@ class TrainCharacter(CharacterEntity):
 # Returns the reward of state s based on the events in s
 def getReward(s):
     for event in s.events:
-        if (event.tpe == 2 or event.tpe == 3): # Character killed
+        if (event.tpe == 0 or event.tpe == 1): # Bomb hit wall or bomb hit monster
+            return 200
+        elif (event.tpe == 2 or event.tpe == 3): # Character killed
             return -1000
         elif (event.tpe == 4): # Character found exit
             return 1000
