@@ -1,1 +1,0 @@
-np.save('weights.npy', self.w)

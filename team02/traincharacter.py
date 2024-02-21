@@ -1,14 +1,25 @@
 # This is necessary to find the main code
-from enum import Enum
-from random import random
+# System imports
 import sys
 sys.path.insert(0, '../bomberman')
 sys.path.insert(1, '..')
+
+# AStar Imports
+from priority_queue import PriorityQueue
+from world import World
+
 # Import necessary stuff
 from entity import CharacterEntity
 from colorama import Fore, Back
-import numpy as np
 from events import Event
+
+# Math imports
+from enum import Enum
+import numpy as np
+from random import random
+import math
+
+# Unit testing and debugging imports
 from icecream import ic
 
 s, a = None, None
@@ -83,17 +94,17 @@ class TrainCharacter(CharacterEntity):
         char_y = self.y + a.value[1]
 
         # fs should be normalized from 0 to 1
-        f_e = manhattanDist((char_x,char_y), s.exitcell) #manhattan dist to the exit 
+        f_e = aStarDist(s, (char_x,char_y), s.exitcell) #aStar dist to the exit 
 
         f_m = MAXDIST
         for i in range(len(list(s.monsters.values()))):
             monster = list(s.monsters.values())[i][0]
-            f_m = manhattanDist((char_x,char_y), (monster.x,monster.y)) #manhattan dist to the monster 
+            f_m = aStarDist(s, (char_x,char_y), (monster.x,monster.y)) #aStar dist to the monster 
         
         f_x = MAXDIST
         for i in range(len(list(s.monsters.values()))):
             explosion = list(s.explosion.values())[i][0]
-            f_x = manhattanDist((char_x,char_y), (explosion.x,explosion.y)) #manhattan dist to the explosion
+            f_x = aStarDist(s, (char_x,char_y), (explosion.x,explosion.y)) #aStar dist to the explosion
         
         # normalization
         f_e /= MAXDIST
@@ -158,3 +169,93 @@ def manhattanDist(point1, point2):
     x2, y2 = point2
 
     return abs(x2 - x1) + abs(y2 - y1)
+
+def aStarDist(s, point1, point2):
+    x1, y1 = point1
+    x2, y2 = point2
+
+    path = AStar.a_star(s, (x1, y1), (x2, y2))
+    if path == None:
+        return manhattanDist(point1, point2)
+    else:
+        return len(path)
+
+class AStar():
+
+    def a_star(wrld: World, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
+        """
+        Calculates the path using A Star
+        :param wrld [World]                  The map data.
+        :start: tuple[int, int]                 The starting position (grid coord)
+        :goal: tuple[int, int]                 The goal position (grid coord)
+        :return        list[tuple[int, int]]    The path i.e. list of points (grid coord)
+        """
+
+        if (start == goal):
+            return []
+
+        frontier = PriorityQueue() # frontier 
+        frontier.put(start,0) # adding the start to the frontier 
+        came_from = {} # list of linked list of the path to each node
+        cost_so_far = {} # cost to each node
+        heuristic_so_far = {} # heuristic of each node
+        came_from[start] = None # setting the came_from to None for start
+        cost_so_far[start] = 0 # setting the cost of the start to 0
+
+        # keep looping until no more nodes in frontier
+        while not frontier.empty():
+            current = frontier.get() # get the first node
+            if current == goal: # reached to the goal
+                break 
+            for next in AStar.getNeighborsOfEight(current, wrld, goal): # get the list of neighbors 
+                # calculate the new cost
+                new_cost = cost_so_far[current] + 1 
+                heuristic = AStar.heuristic(goal, next)
+                # true if the node has not been visited or if the next node costs less 
+                if not (next in cost_so_far) or new_cost < cost_so_far[next]: # or heuristic < heuristic_so_far[next]:
+                    cost_so_far[next] = new_cost # set the cost 
+                    heuristic_so_far[next] = heuristic
+                    priority =  new_cost + heuristic # calculate the priority
+                    frontier.put(next, priority) # add the node to the priority queue based on the cost 
+                    came_from[next] = current # set the path of the node
+
+         # Check if the goal was reached
+        if goal not in came_from:
+            return None  # Return None if there's no path to the goal
+
+        path = [] # the optimized path 
+        current = goal # go back wards
+        while True:
+            path.insert(0, current) # add the path to the list
+            current = came_from[current] # set the curent to the node current came from
+            if(current == start): # true if we reach the start
+                break
+        
+        # return the path
+        return path
+        
+    def getNeighborsOfEight(cell: tuple[int,int], wrld: World, goal: tuple[int, int]):
+        # List of empty cells
+        neighbors = []
+        x,y = cell
+        # Go through neighboring cells
+        for dx in [-1, 0, 1]:
+            # Avoid out-of-bounds access
+            if ((x + dx >= 0) and (x + dx < wrld.width())):
+                for dy in [-1, 0, 1]:
+                    # Avoid out-of-bounds access
+                    if ((y + dy >= 0) and (y + dy < wrld.height())):
+                        # Is this cell safe and not a non-move?
+                        if  (wrld.exit_at(x + dx, y + dy) or
+                        wrld.empty_at(x + dx, y + dy) or (x + dx, y + dy) == goal):
+                            # Yes
+                            neighbors.append((dx, dy))
+        # All done
+        return [(x+dx,y+dy) for (dx,dy) in neighbors]
+        
+    def heuristic(goal, next):
+        goal_dist = AStar.euclidean_distance(goal, next)
+        return goal_dist
+                
+    def euclidean_distance(cell1, cell2):
+        return math.dist(cell1, cell2)
