@@ -21,4 +21,4 @@ g.add_character(TrainCharacter("me", # name
 ))
 
 # Run!
-g.go(wait=0)
+g.go(wait=1)

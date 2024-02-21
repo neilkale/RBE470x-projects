@@ -105,7 +105,13 @@ class Game:
         self.display_gui()
         self.draw()
         step()
-        while not self.done():
+        ######### TODO REPLACE THIS WITH THE SECTION BELOW
+        count = 0
+        while not self.done() and count < 200:
+            count += 1
+        #########
+        # while not self.done():
+        #########
             (self.world, self.events) = self.world.next()
             self.display_gui()
             self.draw()

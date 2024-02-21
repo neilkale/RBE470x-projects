@@ -24,10 +24,13 @@ from icecream import ic
 
 s, a = None, None
 GAMMA = 0.8 #tune value
-ALPHA = 0.7 #tune value
+ALPHA = 0.2 #tune value
 EPSILON = 0.8 #tune value
 WEIGHTS_FILE_NAME = "weights.npy"
 VERBOSE = True
+
+CREATE_NEW_WEIGHTS = False
+NUM_WEIGHTS = 7
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -46,8 +49,11 @@ class TrainCharacter(CharacterEntity):
 
     def __init__(self, name, avatar, x, y):
         super().__init__(name, avatar, x, y)
-        self.w =  np.load(WEIGHTS_FILE_NAME) # np.array([1.,1.,1.,1.]) # (w1, w2, w3, w4)
-        # self.w = self.w - np.mean(self.w) / np.std(self.w)
+        if (CREATE_NEW_WEIGHTS):
+            self.w = np.ones(NUM_WEIGHTS)
+        else:
+            self.w =  np.load(WEIGHTS_FILE_NAME) # np.array([1.,1.,1.,1.]) # (w1, w2, w3, w4)
+        self.w = (self.w - np.mean(self.w))
         
     def do(self, s_prime):
         global s,a 
@@ -57,11 +63,12 @@ class TrainCharacter(CharacterEntity):
             pass
         else: # this was not the first step
             # Get (s, a, s', r)
-            r = getReward(s_prime)
+            r = self.getReward(s_prime)
             # Compute delta
             delta = r + GAMMA * max([self.getQValue(s_prime,a_prime) for a_prime in self.getActions(s_prime)]) - self.getQValue(s,a)
             # Update the weights
             self.w += ALPHA * delta * self.getFeatures(s,a)
+            self.w = (self.w - np.mean(self.w))
 
         # Set s = s'
         s = s_prime
@@ -94,31 +101,54 @@ class TrainCharacter(CharacterEntity):
         char_x = self.x + a.value[0]
         char_y = self.y + a.value[1]
 
-        # fs should be normalized from 0 to 1
+        # distance to the exit cell
         f_e = aStarDist(s, (char_x,char_y), s.exitcell) #aStar dist to the exit 
 
+        # Distance to the closest monster
         f_m = MAXDIST
         for i in range(len(list(s.monsters.values()))):
             monster = list(s.monsters.values())[i][0]
-            f_m = aStarDist(s, (char_x,char_y), (monster.x,monster.y)) #aStar dist to the monster 
+            f_m = min(f_m, aStarDist(s, (char_x,char_y), (monster.x,monster.y))) #aStar dist to the monster 
         
+        # Distance to the closest explosion cell
         f_x = MAXDIST
-        for i in range(len(list(s.monsters.values()))):
-            explosion = list(s.explosion.values())[i][0]
-            f_x = aStarDist(s, (char_x,char_y), (explosion.x,explosion.y)) #aStar dist to the explosion
+        for i in range(len(list(s.explosions.values()))):
+            explosion = list(s.explosions.values())[i]
+            f_x = min(f_x, manhattanDist((char_x,char_y), (explosion.x,explosion.y)))
         
+        # Distance to the closest bomb cell
         f_b = MAXDIST
-        for i in range(len(list(s.monsters.values()))):
-            bomb = list(s.bombs.values())[i][0]
-            f_x = aStarDist(s, (char_x,char_y), (bomb.x,bomb.y)) #aStar dist to the bombs
+        for i in range(len(list(s.bombs.values()))):
+            bomb = list(s.bombs.values())[i]
+            f_b = min(f_b, manhattanDist((char_x,char_y), (bomb.x,bomb.y))) #aStar dist to the bombs
 
+        # Binary feature which returns 1 if character is in the same line (x axis or y-axis) as a bomb
+        f_b_xy = 0
+        for i in range(len(list(s.bombs.values()))):
+            bomb = list(s.bombs.values())[i]
+            if bomb.x == char_x or bomb.y == char_y: 
+                f_b_xy = 1
+                break
+        
+        # Binary feature which returns 1 if character is inside an explosion.
+        f_x_in = 0
+        for i in range(len(list(s.explosions.values()))):
+            explosion = list(s.explosions.values())[i]
+            if explosion.x == char_x and explosion.y == char_y:
+                f_x_in = 1
+                break
+        
+        # Manhattan distance to the exit cell
+        f_e_m = manhattanDist((char_x, char_y), s.exitcell)
+        
         # normalization
-        f_e /= MAXDIST
-        f_m /= MAXDIST
-        f_x /= MAXDIST
-        f_b /= MAXDIST
+        f_e = 1 - f_e/MAXDIST
+        f_m = 1 - f_m/MAXDIST
+        f_x = 1 - f_x/MAXDIST
+        f_b = 1 - f_b/MAXDIST
+        f_e_m = 1 - f_e_m/MAXDIST
 
-        return np.array([f_e, f_m, f_x, f_b])
+        return np.array([f_e, f_e_m, f_m, f_x, f_x_in, f_b, f_b_xy])
         
     def takeAction(self, action):
         """
@@ -153,17 +183,17 @@ class TrainCharacter(CharacterEntity):
         else:
             idx = int(random() * len(actions))
         return actions[idx]
-        
-# Returns the reward of state s based on the events in s
-def getReward(s):
-    for event in s.events:
-        if (event.tpe == 0 or event.tpe == 1): # Bomb hit wall or bomb hit monster
-            return 200
-        elif (event.tpe == 2 or event.tpe == 3): # Character killed
-            return -1000
-        elif (event.tpe == 4): # Character found exit
-            return 1000
-    return -1 # Default reward
+    
+    # Returns the reward of state s based on the events in s
+    def getReward(self, s):
+        for event in s.events:
+            if (event.tpe == 0 or event.tpe == 1): # Bomb hit wall or bomb hit monster
+                return 1000
+            elif (event.tpe == 2 or event.tpe == 3): # Character killed
+                return -2000
+            elif (event.tpe == 4): # Character found exit
+                return 2000
+        return -manhattanDist((self.x, self.y), s.exitcell)*10 # Default reward
 
 # Returns true if the agent is dead or has reached the exit, otherwise false
 def isTerminalState(s):
@@ -185,7 +215,7 @@ def aStarDist(s, point1, point2):
 
     path = AStar.a_star(s, (x1, y1), (x2, y2))
     if path == None:
-        return manhattanDist(point1, point2)
+        return s.width() + s.height() # world height and wrld grid
     else:
         return len(path)
 
