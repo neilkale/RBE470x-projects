@@ -53,7 +53,7 @@ class TrainCharacter(CharacterEntity):
             self.w = np.ones(NUM_WEIGHTS)
         else:
             self.w =  np.load(WEIGHTS_FILE_NAME) # np.array([1.,1.,1.,1.]) # (w1, w2, w3, w4)
-        self.w = (self.w - np.mean(self.w))
+            self.w = (self.w - np.mean(self.w)) / np.std(self.w)
         
     def do(self, s_prime):
         global s,a 
@@ -68,7 +68,7 @@ class TrainCharacter(CharacterEntity):
             delta = r + GAMMA * max([self.getQValue(s_prime,a_prime) for a_prime in self.getActions(s_prime)]) - self.getQValue(s,a)
             # Update the weights
             self.w += ALPHA * delta * self.getFeatures(s,a)
-            self.w = (self.w - np.mean(self.w))
+            self.w = (self.w - np.mean(self.w)) / np.std(self.w)
 
         # Set s = s'
         s = s_prime
