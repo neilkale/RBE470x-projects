@@ -107,7 +107,7 @@ class Game:
         step()
         ######### TODO REPLACE THIS WITH THE SECTION BELOW
         count = 0
-        while not self.done() and count < 200:
+        while not self.done() and count < 2000:
             count += 1
         #########
         # while not self.done():

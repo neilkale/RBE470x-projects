@@ -3,7 +3,7 @@ setlocal
 set /a "count=0"
 
 :loop
-if %count%==100 goto end
+if %count%==10000 goto end
 
 python -u "c:\RBE470x-projects\team02\project2\variant1.py"
 set /a "count+=1"
