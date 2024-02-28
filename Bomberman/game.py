@@ -118,6 +118,7 @@ class Game:
             step()
             self.world.next_decisions()
         colorama.deinit()
+        return [event.tpe for event in self.world.events] # TODO DELETE THIS LINE
 
     ###################
     # Private methods #

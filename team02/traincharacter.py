@@ -27,14 +27,14 @@ from icecream import ic
 s, a = None, None
 suicidal = False
 
-GAMMA = 0.6 #tune value
-ALPHA = 0.03 #tune value
-EPSILON = 0.15 #tune value
+GAMMA = 0.4 #tune value
+ALPHA = 0.05 #tune value
+EPSILON = 0.5 #tune value
 WEIGHTS_FILE_NAME = "weights.npy"
 VERBOSE = True
 
 CREATE_NEW_WEIGHTS = False
-NUM_WEIGHTS = 12
+NUM_WEIGHTS = 16
 
 # possible action set that the character can take
 class ActionSet(Enum):
@@ -67,7 +67,7 @@ class TrainCharacter(CharacterEntity):
             pass
         else: # this was not the first step
             # Get (s, a, s', r)
-            r = self.getReward(s_prime, s)
+            r = self.getReward(s_prime, s, a)
             if VERBOSE: ic(a)
             if VERBOSE: ic(r)
             if VERBOSE: print()
@@ -90,7 +90,7 @@ class TrainCharacter(CharacterEntity):
         if VERBOSE: ic(features)
         if VERBOSE: ic(self.w)
         if VERBOSE: ic(qValues)
-        if VERBOSE: ic('\n\n\n')
+        if VERBOSE: print('\n\n\n')
 
         a = self.selectAction(actions, qValues)
 
@@ -131,6 +131,32 @@ class TrainCharacter(CharacterEntity):
             monster = list(s.monsters.values())[i][0]
             f_m = min(f_m, aStarDist(s, (char_x,char_y), (monster.x,monster.y))) #aStar dist to the monster 
         
+        # Binary feature which returns 1 if the agent moves within:
+        # 2 step of 'stupid' monster, 3 step of 'self-preserving monster', 4 step of 'aggressive monster'
+        # Early detection warning...
+        f_m_w = 0
+        for i in range(len(list(s.monsters.values()))):
+            monster = list(s.monsters.values())[i][0]
+            if monster.name == 'stupid' and aStarDist(s, (char_x,char_y), (monster.x,monster.y)) <= 2:
+                f_m_w = 1
+            if monster.name == 'selfpreserving' and aStarDist(s, (char_x,char_y), (monster.x,monster.y)) <= 3:
+                f_m_w = 1
+            if monster.name == 'aggressive' and aStarDist(s, (char_x,char_y), (monster.x,monster.y)) <= 4:
+                f_m_w = 1
+
+
+        # Binary feature which returns 1 if the agent moves within:
+        # 1 step of 'stupid' monster, 2 step of 'self-preserving monster', 3 step of 'aggressive monster'
+        f_m_c = 0
+        for i in range(len(list(s.monsters.values()))):
+            monster = list(s.monsters.values())[i][0]
+            if monster.name == 'stupid' and aStarDist(s, (char_x,char_y), (monster.x,monster.y)) <= 1:
+                f_m_c = 1
+            if monster.name == 'selfpreserving' and aStarDist(s, (char_x,char_y), (monster.x,monster.y)) <= 2:
+                f_m_c = 1
+            if monster.name == 'aggressive' and aStarDist(s, (char_x,char_y), (monster.x,monster.y)) <= 3:
+                f_m_c = 1
+
         # Distance to the closest explosion cell
         f_x = MAXDIST
         for i in range(len(list(s.explosions.values()))):
@@ -152,7 +178,7 @@ class TrainCharacter(CharacterEntity):
             if manhattanDist((char_x,char_y), (bomb.x,bomb.y)) <= 4 and (bomb.x == char_x or bomb.y == char_y) and bomb.timer <= 2: 
                 f_b_xy = 1
                 break
-        
+                
         # Binary feature which returns 1 if character is on top of a bomb
         f_b_on = 0
         for i in range(len(list(s.bombs.values()))):
@@ -166,6 +192,11 @@ class TrainCharacter(CharacterEntity):
         if a == ActionSet.BOMB:
             f_b_drop = 1
 
+        # Binary feature which returns 1 if the move is to do nothing
+        f_d_n = 0
+        if a == ActionSet.NOTHING:
+            f_d_n = 1
+
         # Binary feature which returns 1 if character is adjacent to an explosion. 
         f_x_in = 0
         for i in range(len(list(s.explosions.values()))):
@@ -173,30 +204,41 @@ class TrainCharacter(CharacterEntity):
             if manhattanDist((char_x,char_y), (explosion.x,explosion.y)) == 1:
                 f_x_in = 1
                 break
-        
-        # Number of open directions of motion
-        f_d =  len(getActions((char_x, char_y), s))
+
+        # Binary feature which returns true if character's next step in AStar path is a wall and it is dropping a bomb.
+        # The weight associated with this feature should be super positive to encourage this behavior.
+        f_w_n = 0
+        if a == ActionSet.BOMB:
+            path = AStarWithWalls.a_star(s, (char_x,char_y), s.exitcell)
+            if path != [] and s.wall_at(path[0][0], path[0][1]):
+                f_w_n = 1
+
+        # Returns the number of walls which a bomb could explode next to the character if the action is dropping a bomb.
+        # Basically, the number of walls which will be exploded by the current action.
+        f_w_b = 0
+        if a == ActionSet.BOMB:
+            f_w_b = getBombWalls((char_x, char_y), s)
 
         # Number of walls next to the character
         f_w = getNumWalls((char_x, char_y), s)
         
         # normalization
-        # f_e = 1 - f_e/MAXDIST
+        f_e = 1 - f_e/MAXDIST
         # f_m = 1 - f_m/MAXDIST
         # f_x = 1 - f_x/MAXDIST
         # f_b = 1 - f_b/MAXDIST
         # f_e_m = 1 - f_e_m/MAXDIST
 
-        f_e = 1/(1 + f_e)
+        # f_e = 1/(1 + f_e)
         f_m = 1/(1 + f_m)
         f_x = 1/(1 + f_x)
         f_b = 1/(1 + f_b)
         f_e_m = 1/(1 + f_e_m)
+        f_w_b = 1/(1+ f_w_b)
 
-        f_d = f_d/10
-        f_w = f_w/10
+        f_w = f_w/8
 
-        features = np.array([f_e, f_e_m, f_e_c, f_m, f_x, f_x_in, f_b, f_b_xy, f_b_on, f_b_drop, f_d, f_w])
+        features = np.array([f_e, f_e_m, f_e_c, f_m, f_m_w, f_m_c, f_x, f_x_in, f_b, f_b_xy, f_b_on, f_b_drop, f_d_n, f_w, f_w_b, f_w_n])
 
         return np.round(features, decimals = 3)
         
@@ -219,7 +261,8 @@ class TrainCharacter(CharacterEntity):
         possibleActions = [] # stores the list of possible action
         for action in ActionSet:
             if action == ActionSet.BOMB:
-                possibleActions.append(action)
+                if len(list(s.bombs.values())) == 0 and getNumExplosions((self.x,self.y),s) == 0:
+                    possibleActions.append(action)
             elif action == ActionSet.NOTHING:
                 possibleActions.append(action)
             else: 
@@ -238,47 +281,87 @@ class TrainCharacter(CharacterEntity):
         return actions[idx]
     
     # Returns the reward of state s based on the events in s
-    def getReward(self, s_prime, s):
+    def getReward(self, s_prime, s, a):
         events = [event.tpe for event in s_prime.events]
         # If goal is reached, reward the agent.
         if 4 in events:
-            return 20000
-        
+            return 1000    
         # If the agent was suicidal on a previous turn (so guaranteed to die now)
         # Don't penalize its current action as its irrelevant to its fate.
         global suicidal
         if suicidal:
             return 0
-       
         # If the agent takes a suicidal step - punish it
-        if len(list(s_prime.bombs.values())) > 0:
+        if len(list(s.bombs.values())) > 0:
             for i in range(len(list(s.bombs.values()))):
                 bomb = list(s.bombs.values())[i]
                 if manhattanDist((self.x,self.y), (bomb.x,bomb.y)) <= 4 and (bomb.x == self.x or bomb.y == self.y) and bomb.timer == 1: 
                     suicidal = True
                     s_prime.time = -1
                     break
+        # If the agent takes a suicidal step towards monsters - punish it
+        if len(list(s.monsters.values())) > 0:
+            for i in range(len(list(s.monsters.values()))):
+                monster = list(s.monsters.values())[i][0]
+                if monster.name == 'selfpreserving' and aStarDist(s, (self.x,self.y), (monster.x,monster.y)) < 2:
+                    suicidal = True
+                    s_prime.time = -1
+                if monster.name == 'aggressive' and aStarDist(s, (self.x,self.y), (monster.x,monster.y)) < 3:
+                    suicidal = True
+                    s_prime.time = -1
+    
         if suicidal:
-            return -20000
-        
+            return -1000
+        # if the agent dies, punish it
         if 2 in events or 3 in events:
-            return -10000
-        
-        elif 0 in events or 1 in events:
-            return 500
-        elif (len(list(s.explosions.values())) == 0 and 
-                  len(list(s_prime.explosions.values())) != 0 ):
             return -1000
         
+        # # If the agent blows up a wall, reward it.
+        # if 0 in events or 1 in events:
+        #     return 200
+        # # If the agent places a useful bomb, reward it.
+        # elif (len(list(s.explosions.values())) == 0 and 
+        #           len(list(s_prime.explosions.values())) != 0 ):
+        #     return -100
+
+        # If the action was to drop a bomb:
+        if (a == ActionSet.BOMB):
+        #    If the bomb was useful: 
+            numWalls = getBombWalls((self.x, self.y), s)
+            if(numWalls > 0):
+                return 40
+        #    Else if the bomb was not useful:
+            else:
+                return -40
+        # Otherwise, the action was to move position 
+        # If the action moves to one square away from a stupid monster, punish the agent
+        for i in range(len(list(s_prime.monsters.values()))):
+            monster = list(s_prime.monsters.values())[i][0]
+            if manhattanDist((self.x, self.y),(monster.x,monster.y)) <= 1:
+                return -40
+                             
         currDist = aStarDist(s_prime,(self.x, self.y), s_prime.exitcell) 
         oldChar = list(s.characters.values())[0][0]
         oldDist = aStarDist(s,(oldChar.x, oldChar.y), s.exitcell)
         if currDist < oldDist: # we are closer to the exit
-            return 100
+            return 20
         elif currDist == oldDist: # we are the same distance to the exit
-            return -50
+            return -25
         else: # we are further to the exit
-            return -100
+            return -25
+
+# Returns the number of walls that a bomb can destroy
+def getBombWalls(bombPosition, s):
+    bombWalls = 0
+    for dx in [-4,-3,-2,-1,0,1,2,3,4]:
+        if (0 <= bombPosition[0] + dx < s.width()):
+            if (s.wall_at(bombPosition[0]+dx, bombPosition[1])):
+                bombWalls += 1
+    for dy in [-4,-3,-2,-1,0,1,2,3,4]:
+        if (0 <= bombPosition[1] + dy < s.height()):
+            if (s.wall_at(bombPosition[0], bombPosition[1]+dy)):
+                bombWalls += 1
+    return bombWalls
 
 # Gets the number of actions from the inputted position
 def getActions(position, s):
@@ -289,7 +372,8 @@ def getActions(position, s):
     possibleActions = [] # stores the list of possible action
     for action in ActionSet:
         if action == ActionSet.BOMB:
-            possibleActions.append(action)
+            if len(list(s.bombs.values())) == 0 and getNumExplosions(position,s) == 0:
+                possibleActions.append(action)
         elif action == ActionSet.NOTHING:
             possibleActions.append(action)
         else: 
@@ -312,6 +396,18 @@ def getNumWalls(position, s):
             elif (s.wall_at(position[0] + dx, position[1] + dy)):
                 numWalls += 1
     return numWalls
+
+def getNumExplosions(position, s):
+    numBooms = 0
+    for dx in [-1,0,1]:
+        for dy in [-1,0,1]:
+            if ((0 <= position[0] + dx < s.width())
+                and
+                (0 <= position[1] + dy < s.height())
+                and 
+                (s.explosion_at(position[0] + dx, position[1] + dy))):
+                numBooms += 1
+    return numBooms
 
 # Returns true if the agent is dead or has reached the exit, otherwise false
 def isTerminalState(s):

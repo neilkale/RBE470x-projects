@@ -10,7 +10,6 @@ from game import Game
 sys.path.insert(1, '../team02')
 from traincharacter import TrainCharacter
 
-
 # Create the game
 g = Game.fromfile('map.txt')
 
